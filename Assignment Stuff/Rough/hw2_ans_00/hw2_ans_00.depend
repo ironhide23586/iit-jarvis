@@ -1,5 +1,11 @@
 # depslib dependency file v1.0
-1444015687 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\hw2_ans_00\main.c
+1444029554 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\hw2_ans_00\main.c
 	<stdio.h>
-	<pthread.h>
+	<stdlib.h>
+	<unistd.h>
+	<math.h>
+	<sys/types.h>
+	<sys/times.h>
+	<sys/time.h>
+	<time.h>
 
