@@ -1,18 +1,31 @@
 #include <stdio.h>
-#include <omp.h>
+#include <pthread.h>
+
+#define T_COUNT 1000000
+
+typedef int (*fpt)(int, int);
+
+int lol(int *a)
+{
+    printf("Thread %d executing\n", *a);
+    return *a-2*7/6+9-4;
+}
 
 int main()
 {
-    #pragma omp parallel num_threads(30)
+    fpt lolptr = lol;
+    pthread_t id[T_COUNT];
+    int i, k = 0;
+
+    for (i = 0; i < T_COUNT; i++)
     {
-        int i;
-        printf("Hello world LOLLLLLLL 2, OpenMP Version = %d\n", _OPENMP);
-        #pragma omp for
-        for (i = 1; i <=4; i++)
-        {
-            printf("Iteration %d\n", i);
-        }
-        printf("Goodbye World!!");
+        k++;
+        pthread_create(id + i, NULL, lolptr, &k);
+    }
+
+    for (i = 0; i < T_COUNT; i++)
+    {
+        pthread_join(id[i], NULL);
     }
 }
 

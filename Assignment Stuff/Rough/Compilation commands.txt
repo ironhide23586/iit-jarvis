@@ -1,0 +1,7 @@
+Pthreads -
+gcc INPUT-FILE.c -o OUTPUT-FILE -lpthread
+
+OpenMP -
+gcc -o OUPUT-FILE -fopenmp INPUT-FILE.c
+
+NOTE: OUTPUT-FILE will have no extensions
