@@ -1,0 +1,28 @@
+# depslib dependency file v1.0
+1444097221 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\a2_rough\main_a2rough.c
+	<stdio.h>
+	<pthread.h>
+
+1444095837 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\a2_rough\main_openmp.c
+	<stdio.h>
+	<omp.h>
+
+1444095869 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\a2_rough\main_pthreads.c
+	<stdio.h>
+	<pthread.h>
+
+1444095892 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\a2_rough\main_semaphores.c
+	<stdio.h>
+	<pthread.h>
+	<semaphore.h>
+
+1444095837 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\a2_rough\main_workinggaussinitial.c
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	<math.h>
+	<sys/types.h>
+	<sys/times.h>
+	<sys/time.h>
+	<time.h>
+

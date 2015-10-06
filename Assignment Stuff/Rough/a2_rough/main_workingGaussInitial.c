@@ -6,21 +6,14 @@
  * You need not submit the provided code.
  */
 
-
-
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <unistd.h>
 #include <math.h>
 #include <sys/types.h>
 #include <sys/times.h>
 #include <sys/time.h>
 #include <time.h>
-
-
-#define _TIMESPEC_DEFINED 0   /////////////////////////////////////////////////////////////////////////ADDED
-#include <pthread.h>
 
 /* Program Parameters */
 #define MAXN 2000  /* Max value of N */
@@ -34,7 +27,7 @@ volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
 #define randm() 4|2[uid]&3
 
 /* Prototype */
-void gauss_parallel();  /* The function you will provide.
+void gauss();  /* The function you will provide.
 		* It is this routine that is timed.
 		* It is called only on the parent.
 		*/
@@ -122,7 +115,7 @@ void print_X() {
   }
 }
 
-int main(int argc, char **argv) {
+int main_gauss_seq(int argc, char **argv) {
   /* Timing variables */
   struct timeval etstart, etstop;  /* Elapsed times using gettimeofday() */
   struct timezone tzdummy;
@@ -142,15 +135,15 @@ int main(int argc, char **argv) {
   /* Start Clock */
   printf("\nStarting clock.\n");
   gettimeofday(&etstart, &tzdummy);
-  //etstart2 = times(&cputstart);  /////////////////////////////////////////////////////////////////////////COMMENTED OUT
+  //etstart2 = times(&cputstart);
 
   /* Gaussian Elimination */
-  gauss_parallel();
+  gauss();
 
   /* Stop Clock */
   gettimeofday(&etstop, &tzdummy);
   //etstop2 = times(&cputstop);
-  printf("Stopped clock.\n");   /////////////////////////////////////////////////////////////////////////COMMENTED OUT
+  printf("Stopped clock.\n");
   usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
   usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
 
@@ -186,77 +179,7 @@ int main(int argc, char **argv) {
 /* Provided global variables are MAXN, N, A[][], B[], and X[],
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
-
-void *processRows(int *index)
-{
-    int row = *index;
-    int norm = *(index + 1);
-    printf("Processing Row %d, with norm %d\n", row, norm);
-}
-
-void gauss_parallel()
-{
-    int norm, row, col;  /* Normalization row, and zeroing
-			* element row and col */
-    float multiplier;
-
-    printf("Computing Parallel-ly.\n");
-
-    pthread_t *rowThreads;
-    int nThreads, i, *indices;
-
-    /* Gaussian elimination */
-    for (norm = 0; norm < N - 1; norm++)
-    {
-        nThreads = N - norm - 1;
-
-        rowThreads = (pthread_t *)malloc(nThreads * sizeof(pthread_t));
-        indices = (int *)malloc(2 * nThreads * sizeof(int));
-
-        i = 0;
-
-        printf("nThreads = %d\n", nThreads);
-
-        for (row = norm + 1; row < N; row++)
-        {
-            *(indices + 2 * i) = row;
-            *(indices + 2 * i + 1) = norm;
-            i++;
-        }
-
-        i = 0;
-        for (i = 0; i < nThreads; i++)
-        {
-            pthread_create(rowThreads + i, NULL, processRows, (indices + 2 * i));
-        }
-
-        for (i = 0; i < nThreads; i++)
-        {
-            pthread_join(*(rowThreads + i), NULL);
-        }
-        free(rowThreads);
-        free(indices);
-    }
-    /* (Diagonal elements are not normalized to 1.  This is treated in back
-    * substitution.)
-    */
-
-    /* Back substitution */
-
-    /*
-    for (row = N - 1; row >= 0; row--)
-    {
-        X[row] = B[row];
-        for (col = N-1; col > row; col--)
-        {
-            X[row] -= A[row][col] * X[col];
-        }
-        X[row] /= A[row][row];
-    }
-    */
-}
-
-void gauss_sequential() {
+void gauss() {
   int norm, row, col;  /* Normalization row, and zeroing
 			* element row and col */
   float multiplier;
@@ -276,6 +199,7 @@ void gauss_sequential() {
   /* (Diagonal elements are not normalized to 1.  This is treated in back
    * substitution.)
    */
+
 
   /* Back substitution */
   for (row = N - 1; row >= 0; row--) {
