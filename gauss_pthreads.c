@@ -15,8 +15,11 @@
 #include <sys/time.h>
 #include <time.h>
 
+<<<<<<< HEAD
 #include <pthread.h>
 
+=======
+>>>>>>> 37abfbfea46dcaac9d8d70504c296aac81ef82da
 /* Program Parameters */
 #define MAXN 2000  /* Max value of N */
 int N;  /* Matrix size */
@@ -140,7 +143,11 @@ int main(int argc, char **argv) {
   etstart2 = times(&cputstart);
 
   /* Gaussian Elimination */
+<<<<<<< HEAD
   gauss_parallel();
+=======
+  gauss();
+>>>>>>> 37abfbfea46dcaac9d8d70504c296aac81ef82da
 
   /* Stop Clock */
   gettimeofday(&etstop, &tzdummy);
@@ -199,10 +206,19 @@ void *processRows(int *index)
 void gauss_parallel()
 {
     int numCPU = sysconf( _SC_NPROCESSORS_ONLN );
+<<<<<<< HEAD
+=======
+    printf("Number of active cores = %d\n", numCPU);
+>>>>>>> 37abfbfea46dcaac9d8d70504c296aac81ef82da
 
     if (N <= numCPU)
         numCPU = N - 1;
 
+<<<<<<< HEAD
+=======
+    printf("Number of Cores = %d\n", numCPU);
+
+>>>>>>> 37abfbfea46dcaac9d8d70504c296aac81ef82da
     float f = (float) (N - 1) / numCPU;
 
     int blockSize = (unsigned int) f;
