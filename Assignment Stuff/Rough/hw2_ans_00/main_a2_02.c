@@ -86,10 +86,8 @@ void initialize_inputs() {
   for (col = 0; col < N; col++) {
     for (row = 0; row < N; row++) {
       A[row][col] = (float)rand() / 32768.0;
-      AT[row][col] = A[row][col];
     }
     B[col] = (float)rand() / 32768.0;
-    BT[col] = B[col];
     X[col] = 0.0;
   }
 
@@ -147,67 +145,6 @@ int main(int argc, char **argv) {
   //etstart2 = times(&cputstart);  /////////////////////////////////////////////////////////////////////////COMMENTED OUT
 
   /* Gaussian Elimination */
-  gauss_parallel();
-
-  /* Stop Clock */
-  gettimeofday(&etstop, &tzdummy);
-  //etstop2 = times(&cputstop);
-  printf("Stopped clock.\n");   /////////////////////////////////////////////////////////////////////////COMMENTED OUT
-  usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
-  usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
-
-  /* Display output */
-  print_X();
-
-  /* Display timing results */
-  printf("\nElapsed time = %g ms.\n",
-	 (float)(usecstop - usecstart)/(float)1000);
-
-  printf("(CPU times are accurate to the nearest %g ms)\n",
-	 1.0/(float)CLOCKS_PER_SEC * 1000.0);
-  printf("My total CPU time for parent = %g ms.\n",
-	 (float)( (cputstop.tms_utime + cputstop.tms_stime) -
-		  (cputstart.tms_utime + cputstart.tms_stime) ) /
-	 (float)CLOCKS_PER_SEC * 1000);
-  printf("My system CPU time for parent = %g ms.\n",
-	 (float)(cputstop.tms_stime - cputstart.tms_stime) /
-	 (float)CLOCKS_PER_SEC * 1000);
-  printf("My total CPU time for child processes = %g ms.\n",
-	 (float)( (cputstop.tms_cutime + cputstop.tms_cstime) -
-		  (cputstart.tms_cutime + cputstart.tms_cstime) ) /
-	 (float)CLOCKS_PER_SEC * 1000);
-      /* Contrary to the man pages, this appears not to include the parent */
-  printf("--------------------------------------------\n\n");
-
-
-
-
-  //parameters(argc, argv);
-
-  /* Initialize A and B */
-  //initialize_inputs();
-
-    int rowT, colT;
-
-  printf("\nInitializing...\n");
-  for (colT = 0; colT < N; colT++) {
-    for (rowT = 0; rowT < N; rowT++) {
-      A[rowT][colT] = AT[rowT][colT];
-    }
-    B[colT] = BT[colT];
-    X[colT] = 0.0;
-  }
-
-
-  /* Print input matrices */
-  print_inputs();
-
-  /* Start Clock */
-  printf("\nStarting clock.\n");
-  gettimeofday(&etstart, &tzdummy);
-  //etstart2 = times(&cputstart);  /////////////////////////////////////////////////////////////////////////COMMENTED OUT
-
-  /* Gaussian Elimination */
   gauss_sequential();
 
   /* Stop Clock */
@@ -238,7 +175,7 @@ int main(int argc, char **argv) {
 		  (cputstart.tms_cutime + cputstart.tms_cstime) ) /
 	 (float)CLOCKS_PER_SEC * 1000);
       /* Contrary to the man pages, this appears not to include the parent */
-  printf("--------------------------------------------\n");
+  printf("--------------------------------------------\n\n");
 
   exit(0);
 }
