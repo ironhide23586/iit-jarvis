@@ -18,6 +18,7 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <windows.h>
 
 #define _TIMESPEC_DEFINED 0   /////////////////////////////////////////////////////////////////////////ADDED
 #include <pthread.h>
@@ -240,6 +241,8 @@ int main(int argc, char **argv) {
       /* Contrary to the man pages, this appears not to include the parent */
   printf("--------------------------------------------\n");
 
+
+
   exit(0);
 }
 
@@ -252,63 +255,81 @@ int main(int argc, char **argv) {
 
 void *processRows(int *index)
 {
-    int row = *index, col;
-    int norm = *(index + 1);
+    int startRow = *index, col, endRow = *(index + 1), norm = *(index + 2), row;
     //printf("Processing Row %d, with norm %d\n", row, norm);
-    float multiplier = A[row][norm] / A[norm][norm];
-
+    float multiplier;
+    /*
     for (col = norm; col < N; col++)
     {
         A[row][col] -= A[norm][col] * multiplier;
     }
     B[row] -= B[norm] * multiplier;
+    */
+    for (row = startRow; row <= endRow; row++)
+    {
+        multiplier = A[row][norm] / A[norm][norm];
+        for (col = norm; col < N; col++)
+        {
+            A[row][col] -= A[norm][col] * multiplier;
+        }
+        B[row] -= B[norm] * multiplier;
+    }
 }
 
 void gauss_parallel()
 {
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo( &sysinfo );
+
+    int numCPU = sysinfo.dwNumberOfProcessors;
+
+    if (N <= numCPU)
+        numCPU = N - 1;
+
+    printf("Number of Cores = %d\n", numCPU);
+
+    int blockSize = ceil((float) (N - 1) / numCPU);
+
     int norm, row, col;  /* Normalization row, and zeroing
 			* element row and col */
     float multiplier;
 
     printf("Computing Parallel-ly.\n");
 
-    //pthread_t *rowThreads;
-    pthread_t rowThreads[MAXN];
-    int nThreads, i, indices[2*(MAXN-1)];
+    pthread_t *rowThreads;
+    rowThreads = (pthread_t *)malloc(numCPU * sizeof(pthread_t));
+
+    int nThreads, i, *indices;
+    indices = (int *)malloc(3 * numCPU * sizeof(int));
+
 
     /* Gaussian elimination */
     for (norm = 0; norm < N - 1; norm++)
     {
-        nThreads = N - norm - 1;
-
-        //rowThreads = (pthread_t *)malloc(nThreads * sizeof(pthread_t));
-        //indices = (int *)malloc(2 * nThreads * sizeof(int));
-
+        //nThreads = N - norm - 1;
         i = 0;
-
-        //printf("nThreads = %d\n", nThreads);
-
-        for (row = norm + 1; row < N; row++)
+        for (row = norm + 1; row < N; row+=blockSize)
         {
-            indices[2 * i] = row;
-            indices[2 * i + 1] = norm;
-            //*(indices + 2 * i) = row;
-            //*(indices + 2 * i + 1) = norm;
+            indices[3 * i] = row;
+
+            if ((row + blockSize - 1) < N)
+                indices[3 * i + 1] = row + blockSize - 1;
+            else
+                indices[3 * i + 1] = N - 1;
+
+            indices[3 * i + 2] = norm;
             i++;
         }
 
-        i = 0;
-        for (i = 0; i < nThreads; i++)
+        for (i = 0; i < numCPU; i++)
         {
-            pthread_create(rowThreads + i, NULL, processRows, (indices + 2 * i));
+            pthread_create(rowThreads + i, NULL, processRows, (indices + 3 * i));
         }
 
-        for (i = 0; i < nThreads; i++)
+        for (i = 0; i < numCPU; i++)
         {
             pthread_join(*(rowThreads + i), NULL);
         }
-        //free(rowThreads);
-        //free(indices);
     }
     /* (Diagonal elements are not normalized to 1.  This is treated in back
     * substitution.)
