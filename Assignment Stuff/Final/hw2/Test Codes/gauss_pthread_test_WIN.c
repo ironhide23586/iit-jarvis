@@ -6,8 +6,11 @@
  * You need not submit the provided code.
  */
 
+
+
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <unistd.h>
 #include <math.h>
 #include <sys/types.h>
@@ -15,6 +18,9 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <windows.h>
+
+#define _TIMESPEC_DEFINED 0   /////////////////////////////////////////////////////////////////////////ADDED
 #include <pthread.h>
 
 /* Program Parameters */
@@ -22,7 +28,7 @@
 int N;  /* Matrix size */
 
 /* Matrices and vectors */
-volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
+volatile float A[MAXN][MAXN], AT[MAXN][MAXN], B[MAXN], BT[MAXN], X[MAXN];
 /* A * X = B, solve for X */
 
 /* junk */
@@ -81,8 +87,10 @@ void initialize_inputs() {
   for (col = 0; col < N; col++) {
     for (row = 0; row < N; row++) {
       A[row][col] = (float)rand() / 32768.0;
+      AT[row][col] = A[row][col];
     }
     B[col] = (float)rand() / 32768.0;
+    BT[col] = B[col];
     X[col] = 0.0;
   }
 
@@ -137,15 +145,76 @@ int main(int argc, char **argv) {
   /* Start Clock */
   printf("\nStarting clock.\n");
   gettimeofday(&etstart, &tzdummy);
-  etstart2 = times(&cputstart);
+  //etstart2 = times(&cputstart);  /////////////////////////////////////////////////////////////////////////COMMENTED OUT
 
   /* Gaussian Elimination */
   gauss_parallel();
 
   /* Stop Clock */
   gettimeofday(&etstop, &tzdummy);
-  etstop2 = times(&cputstop);
-  printf("Stopped clock.\n");
+  //etstop2 = times(&cputstop);
+  printf("Stopped clock.\n");   /////////////////////////////////////////////////////////////////////////COMMENTED OUT
+  usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+  usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+
+  /* Display output */
+  print_X();
+
+  /* Display timing results */
+  printf("\nElapsed time = %g ms.\n",
+	 (float)(usecstop - usecstart)/(float)1000);
+
+  printf("(CPU times are accurate to the nearest %g ms)\n",
+	 1.0/(float)CLOCKS_PER_SEC * 1000.0);
+  printf("My total CPU time for parent = %g ms.\n",
+	 (float)( (cputstop.tms_utime + cputstop.tms_stime) -
+		  (cputstart.tms_utime + cputstart.tms_stime) ) /
+	 (float)CLOCKS_PER_SEC * 1000);
+  printf("My system CPU time for parent = %g ms.\n",
+	 (float)(cputstop.tms_stime - cputstart.tms_stime) /
+	 (float)CLOCKS_PER_SEC * 1000);
+  printf("My total CPU time for child processes = %g ms.\n",
+	 (float)( (cputstop.tms_cutime + cputstop.tms_cstime) -
+		  (cputstart.tms_cutime + cputstart.tms_cstime) ) /
+	 (float)CLOCKS_PER_SEC * 1000);
+      /* Contrary to the man pages, this appears not to include the parent */
+  printf("--------------------------------------------\n\n");
+
+
+
+
+  //parameters(argc, argv);
+
+  /* Initialize A and B */
+  //initialize_inputs();
+
+    int rowT, colT;
+
+  printf("\nInitializing...\n");
+  for (colT = 0; colT < N; colT++) {
+    for (rowT = 0; rowT < N; rowT++) {
+      A[rowT][colT] = AT[rowT][colT];
+    }
+    B[colT] = BT[colT];
+    X[colT] = 0.0;
+  }
+
+
+  /* Print input matrices */
+  print_inputs();
+
+  /* Start Clock */
+  printf("\nStarting clock.\n");
+  gettimeofday(&etstart, &tzdummy);
+  //etstart2 = times(&cputstart);  /////////////////////////////////////////////////////////////////////////COMMENTED OUT
+
+  /* Gaussian Elimination */
+  gauss_sequential();
+
+  /* Stop Clock */
+  gettimeofday(&etstop, &tzdummy);
+  //etstop2 = times(&cputstop);
+  printf("Stopped clock.\n");   /////////////////////////////////////////////////////////////////////////COMMENTED OUT
   usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
   usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
 
@@ -172,6 +241,8 @@ int main(int argc, char **argv) {
       /* Contrary to the man pages, this appears not to include the parent */
   printf("--------------------------------------------\n");
 
+
+
   exit(0);
 }
 
@@ -181,13 +252,12 @@ int main(int argc, char **argv) {
 /* Provided global variables are MAXN, N, A[][], B[], and X[],
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
-void *processRows(int *index) /*This part is executed in parallel by each thread.*/
+
+void *processRows(int *index)
 {
-    int startRow = *index, col, endRow = *(index + 1), norm = *(index + 2), row; /*Extracting the array index limits from input argument
-										  *for each thread.
-								   		  */
-    float multiplier; 
-    for (row = startRow; row <= endRow; row++) /*Operating on the respective fraction of the Matrix corresponding to the thread.*/
+    int startRow = *index, col, endRow = *(index + 1), norm = *(index + 2), row;
+    float multiplier;
+    for (row = startRow; row <= endRow; row++)
     {
         multiplier = A[row][norm] / A[norm][norm];
         for (col = norm; col < N; col++)
@@ -198,81 +268,61 @@ void *processRows(int *index) /*This part is executed in parallel by each thread
     }
 }
 
-void gauss_parallel() /*Function implementing a parallelized version of the Naive-Gauss elimination algorithm.*/
+void gauss_parallel()
 {
-    int numCPU = sysconf( _SC_NPROCESSORS_ONLN ); /*Getting number of cores on Target Machine.
-						   *Work on the matrix will be equally split across each core to ensure maximum performance. 
-						   */
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo( &sysinfo );
 
+    int numCPU = sysinfo.dwNumberOfProcessors;
     printf("Computing in Parallel on %d Logical cores\n", numCPU);
 
-    if (N <= numCPU)	/*This handles the edge case when matrix size is smaller than number of
-			 *cores on the machine.
-			 */
+    if (N <= numCPU)
         numCPU = N - 1;
 
-    float f = (float) (N - 1) / numCPU;
-
-    int blockSize = (unsigned int) f; /*Calculating number of rows each thread will be handling.*/
-    if (f > blockSize)
-	blockSize++;
+    int blockSize = ceil((float) (N - 1) / numCPU);
 
     int norm, row, col;  /* Normalization row, and zeroing
-			  * element row and col
-			  */
+			* element row and col */
+    float multiplier;
 
     pthread_t *rowThreads;
-    rowThreads = (pthread_t *)malloc(numCPU * sizeof(pthread_t)); /*Dynamically allocating memory for thread ids
-								   *as the number of threads change according to 
-								   *number of logical cores on target machine.
-								   */
+    rowThreads = (pthread_t *)malloc(numCPU * sizeof(pthread_t));
 
     int nThreads, i, *indices;
-    indices = (int *)malloc(3 * numCPU * sizeof(int)); /*This dynamic array contains sets of 3 values for each thread.
-							*The first value is the index of the row from where the corresponding thread
-							*shall begin processing its fraction of the input matrix.
-							*The second value stores the respective ending row matrix.
-							*The third value stores the index of the current normalization row.
-							*These values are passed as arguments to each thread.
-							*/
+    indices = (int *)malloc(3 * numCPU * sizeof(int));
 
     /* Gaussian elimination */
-    for (norm = 0; norm < N - 1; norm++) /*Proceeding sequentially on each norm row because of
-					  *Read-After-Write dependence between each norm variable iteration.
-					  */
+    for (norm = 0; norm < N - 1; norm++)
     {
         i = 0;
-        for (row = norm + 1; row < N; row += blockSize) /*Putting values in the 'inidices' dynamic array described above.
-							 *Note that this loop increments with a step size equal to the blockSize value
-							 *which is the number of rows each thread will be handling.
-							 */
+        for (row = norm + 1; row < N; row+=blockSize)
         {
-            indices[3 * i] = row; /*First value storing the starting row index.*/
+            indices[3 * i] = row;
 
-            if ((row + blockSize - 1) < N) /*Second value stores the ending row index.*/
+            if ((row + blockSize - 1) < N)
                 indices[3 * i + 1] = row + blockSize - 1;
             else
                 indices[3 * i + 1] = N - 1;
 
-            indices[3 * i + 2] = norm; /*Third value stores value of current normalization row index.*/
+            indices[3 * i + 2] = norm;
             i++;
         }
 
-	numCPU = i; /*Ensures that number of threads launched is equal to the number of proceesing lbocks made.*/
+	numCPU = i;
 
         for (i = 0; i < numCPU; i++)
         {
-            pthread_create(rowThreads + i, NULL, processRows, (indices + 3 * i)); /*Launching each thread to operate on different parts of the array*/
+            pthread_create(rowThreads + i, NULL, processRows, (indices + 3 * i));
         }
 
         for (i = 0; i < numCPU; i++)
         {
-            pthread_join(*(rowThreads + i), NULL); /*Consolidating all threads*/
+            pthread_join(*(rowThreads + i), NULL);
         }
     }
     /* (Diagonal elements are not normalized to 1.  This is treated in back
-     * substitution.)
-     */
+    * substitution.)
+    */
 
     /* Back substitution */
     for (row = N - 1; row >= 0; row--)
@@ -284,4 +334,35 @@ void gauss_parallel() /*Function implementing a parallelized version of the Naiv
         }
         X[row] /= A[row][row];
     }
+}
+
+void gauss_sequential() {
+  int norm, row, col;  /* Normalization row, and zeroing
+			* element row and col */
+  float multiplier;
+
+  printf("Computing Serially.\n");
+
+  /* Gaussian elimination */
+  for (norm = 0; norm < N - 1; norm++) {
+    for (row = norm + 1; row < N; row++) {
+      multiplier = A[row][norm] / A[norm][norm];
+      for (col = norm; col < N; col++) {
+	A[row][col] -= A[norm][col] * multiplier;
+      }
+      B[row] -= B[norm] * multiplier;
+    }
+  }
+  /* (Diagonal elements are not normalized to 1.  This is treated in back
+   * substitution.)
+   */
+
+  /* Back substitution */
+  for (row = N - 1; row >= 0; row--) {
+    X[row] = B[row];
+    for (col = N-1; col > row; col--) {
+      X[row] -= A[row][col] * X[col];
+    }
+    X[row] /= A[row][row];
+  }
 }

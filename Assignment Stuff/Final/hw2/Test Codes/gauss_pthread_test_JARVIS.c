@@ -6,8 +6,11 @@
  * You need not submit the provided code.
  */
 
+
+
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <unistd.h>
 #include <math.h>
 #include <sys/types.h>
@@ -15,6 +18,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+
+#define _TIMESPEC_DEFINED 0   /////////////////////////////////////////////////////////////////////////ADDED
 #include <pthread.h>
 
 /* Program Parameters */
@@ -22,7 +27,7 @@
 int N;  /* Matrix size */
 
 /* Matrices and vectors */
-volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
+volatile float A[MAXN][MAXN], AT[MAXN][MAXN], B[MAXN], BT[MAXN], X[MAXN];
 /* A * X = B, solve for X */
 
 /* junk */
@@ -81,8 +86,10 @@ void initialize_inputs() {
   for (col = 0; col < N; col++) {
     for (row = 0; row < N; row++) {
       A[row][col] = (float)rand() / 32768.0;
+      AT[row][col] = A[row][col];
     }
     B[col] = (float)rand() / 32768.0;
+    BT[col] = B[col];
     X[col] = 0.0;
   }
 
@@ -137,15 +144,76 @@ int main(int argc, char **argv) {
   /* Start Clock */
   printf("\nStarting clock.\n");
   gettimeofday(&etstart, &tzdummy);
-  etstart2 = times(&cputstart);
+  //etstart2 = times(&cputstart);  /////////////////////////////////////////////////////////////////////////COMMENTED OUT
 
   /* Gaussian Elimination */
   gauss_parallel();
 
   /* Stop Clock */
   gettimeofday(&etstop, &tzdummy);
-  etstop2 = times(&cputstop);
-  printf("Stopped clock.\n");
+  //etstop2 = times(&cputstop);
+  printf("Stopped clock.\n");   /////////////////////////////////////////////////////////////////////////COMMENTED OUT
+  usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+  usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+
+  /* Display output */
+  print_X();
+
+  /* Display timing results */
+  printf("\nElapsed time = %g ms.\n",
+	 (float)(usecstop - usecstart)/(float)1000);
+
+  printf("(CPU times are accurate to the nearest %g ms)\n",
+	 1.0/(float)CLOCKS_PER_SEC * 1000.0);
+  printf("My total CPU time for parent = %g ms.\n",
+	 (float)( (cputstop.tms_utime + cputstop.tms_stime) -
+		  (cputstart.tms_utime + cputstart.tms_stime) ) /
+	 (float)CLOCKS_PER_SEC * 1000);
+  printf("My system CPU time for parent = %g ms.\n",
+	 (float)(cputstop.tms_stime - cputstart.tms_stime) /
+	 (float)CLOCKS_PER_SEC * 1000);
+  printf("My total CPU time for child processes = %g ms.\n",
+	 (float)( (cputstop.tms_cutime + cputstop.tms_cstime) -
+		  (cputstart.tms_cutime + cputstart.tms_cstime) ) /
+	 (float)CLOCKS_PER_SEC * 1000);
+      /* Contrary to the man pages, this appears not to include the parent */
+  printf("--------------------------------------------\n\n");
+
+
+
+
+  //parameters(argc, argv);
+
+  /* Initialize A and B */
+  //initialize_inputs();
+
+    int rowT, colT;
+
+  printf("\nInitializing...\n");
+  for (colT = 0; colT < N; colT++) {
+    for (rowT = 0; rowT < N; rowT++) {
+      A[rowT][colT] = AT[rowT][colT];
+    }
+    B[colT] = BT[colT];
+    X[colT] = 0.0;
+  }
+
+
+  /* Print input matrices */
+  print_inputs();
+
+  /* Start Clock */
+  printf("\nStarting clock.\n");
+  gettimeofday(&etstart, &tzdummy);
+  //etstart2 = times(&cputstart);  /////////////////////////////////////////////////////////////////////////COMMENTED OUT
+
+  /* Gaussian Elimination */
+  gauss_sequential();
+
+  /* Stop Clock */
+  gettimeofday(&etstop, &tzdummy);
+  //etstop2 = times(&cputstop);
+  printf("Stopped clock.\n");   /////////////////////////////////////////////////////////////////////////COMMENTED OUT
   usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
   usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
 
@@ -172,6 +240,8 @@ int main(int argc, char **argv) {
       /* Contrary to the man pages, this appears not to include the parent */
   printf("--------------------------------------------\n");
 
+
+
   exit(0);
 }
 
@@ -181,6 +251,7 @@ int main(int argc, char **argv) {
 /* Provided global variables are MAXN, N, A[][], B[], and X[],
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
+
 void *processRows(int *index) /*This part is executed in parallel by each thread.*/
 {
     int startRow = *index, col, endRow = *(index + 1), norm = *(index + 2), row; /*Extracting the array index limits from input argument
@@ -284,4 +355,35 @@ void gauss_parallel() /*Function implementing a parallelized version of the Naiv
         }
         X[row] /= A[row][row];
     }
+}
+
+void gauss_sequential() {
+  int norm, row, col;  /* Normalization row, and zeroing
+			* element row and col */
+  float multiplier;
+
+  printf("Computing Serially.\n");
+
+  /* Gaussian elimination */
+  for (norm = 0; norm < N - 1; norm++) {
+    for (row = norm + 1; row < N; row++) {
+      multiplier = A[row][norm] / A[norm][norm];
+      for (col = norm; col < N; col++) {
+	A[row][col] -= A[norm][col] * multiplier;
+      }
+      B[row] -= B[norm] * multiplier;
+    }
+  }
+  /* (Diagonal elements are not normalized to 1.  This is treated in back
+   * substitution.)
+   */
+
+  /* Back substitution */
+  for (row = N - 1; row >= 0; row--) {
+    X[row] = B[row];
+    for (col = N-1; col > row; col--) {
+      X[row] -= A[row][col] * X[col];
+    }
+    X[row] /= A[row][row];
+  }
 }
