@@ -294,9 +294,11 @@ void gauss_parallel()
     /* Gaussian elimination */
     for (norm = 0; norm < N - 1; norm++)
     {
+        printf("norm=%d\n", norm);
         i = 0;
         for (row = norm + 1; row < N; row+=blockSize)
         {
+            printf("row=%d\n", row);
             indices[3 * i] = row;
 
             if ((row + blockSize - 1) < N)
@@ -308,6 +310,8 @@ void gauss_parallel()
             i++;
         }
 
+        numCPU = i;
+
         for (i = 0; i < numCPU; i++)
         {
             pthread_create(rowThreads + i, NULL, processRows, (indices + 3 * i));
@@ -315,9 +319,12 @@ void gauss_parallel()
 
         for (i = 0; i < numCPU; i++)
         {
+            //printf("i=%d\n", i);
             pthread_join(*(rowThreads + i), NULL);
         }
+        printf("********************\n");
     }
+
     /* (Diagonal elements are not normalized to 1.  This is treated in back
     * substitution.)
     */
