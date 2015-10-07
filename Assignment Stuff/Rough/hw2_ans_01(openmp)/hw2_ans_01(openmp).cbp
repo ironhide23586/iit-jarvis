@@ -11,6 +11,10 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
+<<<<<<< HEAD
+=======
+				<Option parameters="800" />
+>>>>>>> bc18e5e4aa17d3c373b665712647a84d6c99de66
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>
@@ -34,6 +38,12 @@
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+<<<<<<< HEAD
+=======
+		<Unit filename="main_openmp.c">
+			<Option compilerVar="CC" />
+		</Unit>
+>>>>>>> bc18e5e4aa17d3c373b665712647a84d6c99de66
 		<Extensions>
 			<code_completion />
 			<envvars />
