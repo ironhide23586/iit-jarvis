@@ -1,0 +1,41 @@
+# depslib dependency file v1.0
+1444128934 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\assignments\assignment 2\hw2_ans_01(openmp)\main.c
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	<math.h>
+	<sys/types.h>
+	<sys/times.h>
+	<sys/time.h>
+	<time.h>
+	<windows.h>
+	<pthread.h>
+
+1444215750 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\hw2_ans_01(openmp)\main.c
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	<math.h>
+	<sys/types.h>
+	<sys/times.h>
+	<sys/time.h>
+	<time.h>
+	<windows.h>
+	<omp.h>
+
+1444213311 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\hw2_ans_01(openmp)\main_openmp.c
+	<stdio.h>
+	<omp.h>
+
+1444205527 source:c:\users\monst\google drive\academic\grad school stuff\1st semester\cs 546 - parallel and distributed computing\github & codes\iit-jarvis\assignment stuff\rough\hw2_ans_01(openmp)\main_pt.c
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	<math.h>
+	<sys/types.h>
+	<sys/times.h>
+	<sys/time.h>
+	<time.h>
+	<windows.h>
+	<pthread.h>
+
