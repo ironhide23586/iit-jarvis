@@ -250,15 +250,18 @@ int main(int argc, char **argv) {
  */
 void gauss_parallel()
 {
-    int numCPU = ( _SC_NPROCESSORS_ONLN );
+    int numCPU = sysconf( _SC_NPROCESSORS_ONLN );
     printf("Computing in Parallel on %d Logical cores\n", numCPU);
 
     int blockSize, vThreads, norm, row, col, i;
-    float multiplier;
+    float multiplier, f;
     /* Gaussian elimination */
     for (norm = 0; norm < N - 1; norm++)
     {
-        blockSize = ceil((float) (N - norm - 1) / numCPU);
+	f = (float) (N - norm - 1) / numCPU;
+    	blockSize = (unsigned int) f; /*Calculating number of rows each thread will be handling.*/
+    	if (f > blockSize)
+	    blockSize++;
 
         vThreads = blockSize * numCPU;
         if (vThreads > (N-1))
