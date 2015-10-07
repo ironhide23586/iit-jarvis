@@ -93,7 +93,6 @@ void initialize_inputs() {
     BT[col] = B[col];
     X[col] = 0.0;
   }
-
 }
 
 /* Print input matrices */
@@ -125,7 +124,7 @@ void print_X() {
   }
 }
 
-int main(int argc, char **argv) {
+int main_pt(int argc, char **argv) {
   /* Timing variables */
   struct timeval etstart, etstop;  /* Elapsed times using gettimeofday() */
   struct timezone tzdummy;
@@ -279,7 +278,7 @@ void gauss_parallel()
     if (N <= numCPU)
         numCPU = N - 1;
 
-    int blockSize;
+    int blockSize = ceil((float) (N - 1) / numCPU);
 
     int norm, row, col;  /* Normalization row, and zeroing
 			* element row and col */
@@ -294,12 +293,9 @@ void gauss_parallel()
     /* Gaussian elimination */
     for (norm = 0; norm < N - 1; norm++)
     {
-        blockSize = ceil((float) (N - norm - 1) / numCPU);
-        //printf("norm=%d\n", norm);
         i = 0;
         for (row = norm + 1; row < N; row+=blockSize)
         {
-            //printf("row=%d\n", row);
             indices[3 * i] = row;
 
             if ((row + blockSize - 1) < N)
@@ -320,12 +316,9 @@ void gauss_parallel()
 
         for (i = 0; i < numCPU; i++)
         {
-            //printf("i=%d\n", i);
             pthread_join(*(rowThreads + i), NULL);
         }
-        //printf("********************\n");
     }
-
     /* (Diagonal elements are not normalized to 1.  This is treated in back
     * substitution.)
     */

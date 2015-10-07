@@ -21,7 +21,7 @@
 #include <windows.h>
 
 #define _TIMESPEC_DEFINED 0   /////////////////////////////////////////////////////////////////////////ADDED
-#include <pthread.h>
+#include <omp.h>
 
 /* Program Parameters */
 #define MAXN 2000  /* Max value of N */
@@ -93,7 +93,6 @@ void initialize_inputs() {
     BT[col] = B[col];
     X[col] = 0.0;
   }
-
 }
 
 /* Print input matrices */
@@ -252,22 +251,6 @@ int main(int argc, char **argv) {
 /* Provided global variables are MAXN, N, A[][], B[], and X[],
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
-
-void *processRows(int *index)
-{
-    int startRow = *index, col, endRow = *(index + 1), norm = *(index + 2), row;
-    float multiplier;
-    for (row = startRow; row <= endRow; row++)
-    {
-        multiplier = A[row][norm] / A[norm][norm];
-        for (col = norm; col < N; col++)
-        {
-            A[row][col] -= A[norm][col] * multiplier;
-        }
-        B[row] -= B[norm] * multiplier;
-    }
-}
-
 void gauss_parallel()
 {
     SYSTEM_INFO sysinfo;
@@ -276,56 +259,39 @@ void gauss_parallel()
     int numCPU = sysinfo.dwNumberOfProcessors;
     printf("Computing in Parallel on %d Logical cores\n", numCPU);
 
-    if (N <= numCPU)
-        numCPU = N - 1;
-
-    int blockSize;
-
-    int norm, row, col;  /* Normalization row, and zeroing
-			* element row and col */
+    int blockSize, vThreads, norm, row, col, i;
     float multiplier;
-
-    pthread_t *rowThreads;
-    rowThreads = (pthread_t *)malloc(numCPU * sizeof(pthread_t));
-
-    int nThreads, i, *indices;
-    indices = (int *)malloc(3 * numCPU * sizeof(int));
-
     /* Gaussian elimination */
     for (norm = 0; norm < N - 1; norm++)
     {
         blockSize = ceil((float) (N - norm - 1) / numCPU);
-        //printf("norm=%d\n", norm);
-        i = 0;
-        for (row = norm + 1; row < N; row+=blockSize)
+
+        vThreads = blockSize * numCPU;
+        if (vThreads > (N-1))
+            numCPU--;
+
+        int tid;
+        #pragma omp parallel num_threads(numCPU) firstprivate(norm, blockSize) private(tid, multiplier)
         {
-            //printf("row=%d\n", row);
-            indices[3 * i] = row;
+            tid = omp_get_thread_num();
+            int startRow = norm + tid * blockSize + 1, col;
+            int endRow = startRow + blockSize - 1;
 
-            if ((row + blockSize - 1) < N)
-                indices[3 * i + 1] = row + blockSize - 1;
-            else
-                indices[3 * i + 1] = N - 1;
+            if (endRow >= N)
+                endRow = N - 1;
 
-            indices[3 * i + 2] = norm;
-            i++;
+            #pragma omp parallel for schedule(guided)
+            for (row = startRow; row <= endRow; row++)
+            {
+                multiplier = A[row][norm] / A[norm][norm];
+                for (col = norm; col < N; col++)
+                {
+                    A[row][col] -= A[norm][col] * multiplier;
+                }
+                B[row] -= B[norm] * multiplier;
+            }
         }
-
-        numCPU = i;
-
-        for (i = 0; i < numCPU; i++)
-        {
-            pthread_create(rowThreads + i, NULL, processRows, (indices + 3 * i));
-        }
-
-        for (i = 0; i < numCPU; i++)
-        {
-            //printf("i=%d\n", i);
-            pthread_join(*(rowThreads + i), NULL);
-        }
-        //printf("********************\n");
     }
-
     /* (Diagonal elements are not normalized to 1.  This is treated in back
     * substitution.)
     */
