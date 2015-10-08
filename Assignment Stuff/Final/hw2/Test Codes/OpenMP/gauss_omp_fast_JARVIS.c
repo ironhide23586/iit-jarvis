@@ -248,17 +248,9 @@ int main(int argc, char **argv) {
 /* Provided global variables are MAXN, N, A[][], B[], and X[],
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
-
- /* In this parallel implementation, the array is processed sequentially in iterations of the normalization row.
-  * However, each iteration pertaining to the normalization row has been parallelized. The number of rows beneath
-  * the normalization row is divided between multiple threads whose number depends upon the number of logical processors
-  * present on the target machine.
-  * Furthermore, OpenMP's feature to easily parallelize rows has been employed here to parallelize the
-  * loop processing each row inside a thread hence implementing in essence, a sort of branched parallelism.
-  */
 void gauss_parallel()
 {
-    int numCPU = sysconf( _SC_NPROCESSORS_ONLN ); /*Getting number of Logical cores on target machine.*/
+    int numCPU = sysconf( _SC_NPROCESSORS_ONLN );
     printf("Computing in Parallel on %d Logical cores\n", numCPU);
 
     int blockSize, vThreads, norm, row, col, i;
@@ -269,42 +261,24 @@ void gauss_parallel()
 	f = (float) (N - norm - 1) / numCPU;
     	blockSize = (unsigned int) f; /*Calculating number of rows each thread will be handling.*/
     	if (f > blockSize)
-            blockSize++;
+	    blockSize++;
 
-        vThreads = blockSize * numCPU; /*Adjusting number of threads for edge cases to eliminate empty threads*/
+        vThreads = blockSize * numCPU;
         if (vThreads > (N-1))
             numCPU--;
 
-        int tid; /*Variable to contain thread id pertaining to each thread.*/
-        #pragma omp parallel num_threads(numCPU) firstprivate(norm, blockSize) private(tid, multiplier) /*Launching threads in parallel
-                                                                                                         *to carry out implementation of the
-                                                                                                         *Naive-Gauss elimination algorithm.
-                                                                                                         *The number of thread launched is
-                                                                                                         *equal to the number of logical
-                                                                                                         *cores on the target machine.
-                                                                                                         *Each  thread gets its own copy of the
-                                                                                                         *norm variable which changes in the
-                                                                                                         *outer loop.
-                                                                                                         *Also, the blockSize variable i.e. the
-                                                                                                         *number of arrays each thread handles also
-                                                                                                         changes in each outer loop iteration and each
-                                                                                                         *thread also gets its copy of it.
-                                                                                                         */
+        int tid;
+        #pragma omp parallel num_threads(numCPU) firstprivate(norm, blockSize) private(tid, multiplier)
         {
-            tid = omp_get_thread_num(); /*Getting thread id.*/
-            int startRow = norm + tid * blockSize + 1, col; /*Using thread id to calculate starting index of row
-                                                             *which the thread handles.
-                                                             */
-            int endRow = startRow + blockSize - 1; /*Using thread id to calculate ending index of row
-                                                    *which the thread handles.
-                                                    */
-            if (endRow >= N) /*Handling edge case when the final row pertaining to the thread is out of index range.*/
+            tid = omp_get_thread_num();
+            int startRow = norm + tid * blockSize + 1, col;
+            int endRow = startRow + blockSize - 1;
+
+            if (endRow >= N)
                 endRow = N - 1;
 
-            #pragma omp parallel for schedule(guided) /*Main part of each concurrent thread. This carries out the
-                                                       *Naive-Gauss Elimination for the set of rows pertaining to the thread.
-                                                       */
-            for (row = startRow; row <= endRow; row++) /*Iterating through each row in row set.*/
+            #pragma omp parallel for schedule(guided)
+            for (row = startRow; row <= endRow; row++)
             {
                 multiplier = A[row][norm] / A[norm][norm];
                 for (col = norm; col < N; col++)

@@ -276,8 +276,7 @@ void gauss_parallel()
 
             if (endRow >= N)
                 endRow = N - 1;
-
-            #pragma omp parallel for schedule(guided)
+	
             for (row = startRow; row <= endRow; row++)
             {
                 multiplier = A[row][norm] / A[norm][norm];

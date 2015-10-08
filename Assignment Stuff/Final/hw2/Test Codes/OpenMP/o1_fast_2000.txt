@@ -1,0 +1,29 @@
+
+Matrix dimension N = 2000.
+
+Initializing...
+
+Starting clock.
+Computing in Parallel on 8 Logical cores
+Stopped clock.
+
+Elapsed time = 2981.55 ms.
+(CPU times are accurate to the nearest 0.001 ms)
+My total CPU time for parent = 1.785 ms.
+My system CPU time for parent = 0.001 ms.
+My total CPU time for child processes = 0 ms.
+--------------------------------------------
+
+
+Initializing...
+
+Starting clock.
+Computing Serially.
+Stopped clock.
+
+Elapsed time = 9210.33 ms.
+(CPU times are accurate to the nearest 0.001 ms)
+My total CPU time for parent = 1.785 ms.
+My system CPU time for parent = 0.001 ms.
+My total CPU time for child processes = 0 ms.
+--------------------------------------------
