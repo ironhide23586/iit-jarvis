@@ -186,7 +186,7 @@ void *processRows(int *index) /*This part is executed in parallel by each thread
     int startRow = *index, col, endRow = *(index + 1), norm = *(index + 2), row; /*Extracting the array index limits from input argument
 										  *for each thread.
 								   		  */
-    float multiplier;
+    float multiplier; 
     for (row = startRow; row <= endRow; row++) /*Operating on the respective fraction of the Matrix corresponding to the thread.*/
     {
         multiplier = A[row][norm] / A[norm][norm];
@@ -210,7 +210,7 @@ void *processRows(int *index) /*This part is executed in parallel by each thread
 void gauss_parallel() /*Function implementing a parallelized version of the Naive-Gauss elimination algorithm.*/
 {
     int numCPU = sysconf( _SC_NPROCESSORS_ONLN ); /*Getting number of cores on Target Machine.
-						   *Work on the matrix will be equally split across each core to ensure maximum performance.
+						   *Work on the matrix will be equally split across each core to ensure maximum performance. 
 						   */
 
     printf("Computing in Parallel on %d Logical cores\n", numCPU);
@@ -232,7 +232,7 @@ void gauss_parallel() /*Function implementing a parallelized version of the Naiv
 
     pthread_t *rowThreads;
     rowThreads = (pthread_t *)malloc(numCPU * sizeof(pthread_t)); /*Dynamically allocating memory for thread ids
-								   *as the number of threads change according to
+								   *as the number of threads change according to 
 								   *number of logical cores on target machine.
 								   */
 
