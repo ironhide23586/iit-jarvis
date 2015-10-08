@@ -15,8 +15,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-#include <pthread.h>
-
 /* Program Parameters */
 #define MAXN 2000  /* Max value of N */
 int N;  /* Matrix size */
@@ -29,7 +27,7 @@ volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
 #define randm() 4|2[uid]&3
 
 /* Prototype */
-void gauss_parallel();  /* The function you will provide.
+void gauss();  /* The function you will provide.
 		* It is this routine that is timed.
 		* It is called only on the parent.
 		*/
@@ -140,7 +138,7 @@ int main(int argc, char **argv) {
   etstart2 = times(&cputstart);
 
   /* Gaussian Elimination */
-  gauss_parallel();
+  gauss();
 
   /* Stop Clock */
   gettimeofday(&etstop, &tzdummy);
@@ -181,23 +179,6 @@ int main(int argc, char **argv) {
 /* Provided global variables are MAXN, N, A[][], B[], and X[],
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
-void *processRows(int *index) /*This part is executed in parallel by each thread.*/
-{
-    int startRow = *index, col, endRow = *(index + 1), norm = *(index + 2), row; /*Extracting the array index limits from input argument
-										  *for each thread.
-								   		  */
-    float multiplier;
-    for (row = startRow; row <= endRow; row++) /*Operating on the respective fraction of the Matrix corresponding to the thread.*/
-    {
-        multiplier = A[row][norm] / A[norm][norm];
-        for (col = norm; col < N; col++)
-        {
-            A[row][col] -= A[norm][col] * multiplier;
-        }
-        B[row] -= B[norm] * multiplier;
-    }
-}
-
 /* In this parallel implementation, the array is processed sequentially in iterations of the normalization row.
   * However, each iteration pertaining to the normalization row has been parallelized. The number of rows beneath
   * the normalization row is divided between multiple threads whose number depends upon the number of logical processors
@@ -205,81 +186,68 @@ void *processRows(int *index) /*This part is executed in parallel by each thread
   * Furthermore, OpenMP's feature to easily parallelize rows has been employed here to parallelize the
   * loop processing each row inside a thread hence implementing in essence, a sort of branched parallelism.
   */
-void gauss_parallel() /*Function implementing a parallelized version of the Naive-Gauss elimination algorithm.*/
+void gauss_parallel()
 {
-    int numCPU = sysconf( _SC_NPROCESSORS_ONLN ); /*Getting number of cores on Target Machine.
-						   *Work on the matrix will be equally split across each core to ensure maximum performance.
-						   */
-
+    int numCPU = sysconf( _SC_NPROCESSORS_ONLN ); /*Getting number of Logical cores on target machine.*/
     printf("Computing in Parallel on %d Logical cores\n", numCPU);
 
-    if (N <= numCPU)	/*This handles the edge case when matrix size is smaller than number of
-			 *cores on the machine.
-			 */
-        numCPU = N - 1;
-
-    float f = (float) (N - 1) / numCPU;
-
-    int blockSize = (unsigned int) f; /*Calculating number of rows each thread will be handling.*/
-    if (f > blockSize)
-	blockSize++;
-
-    int norm, row, col;  /* Normalization row, and zeroing
-			  * element row and col
-			  */
-
-    pthread_t *rowThreads;
-    rowThreads = (pthread_t *)malloc(numCPU * sizeof(pthread_t)); /*Dynamically allocating memory for thread ids
-								   *as the number of threads change according to
-								   *number of logical cores on target machine.
-								   */
-
-    int nThreads, i, *indices;
-    indices = (int *)malloc(3 * numCPU * sizeof(int)); /*This dynamic array contains sets of 3 values for each thread.
-							*The first value is the index of the row from where the corresponding thread
-							*shall begin processing its fraction of the input matrix.
-							*The second value stores the respective ending row matrix.
-							*The third value stores the index of the current normalization row.
-							*These values are passed as arguments to each thread.
-							*/
-
+    int blockSize, vThreads, norm, row, col, i;
+    float multiplier, f;
     /* Gaussian elimination */
-    for (norm = 0; norm < N - 1; norm++) /*Proceeding sequentially on each norm row because of
-					  *Read-After-Write dependence between each norm variable iteration.
-					  */
+    for (norm = 0; norm < N - 1; norm++)
     {
-        i = 0;
-        for (row = norm + 1; row < N; row += blockSize) /*Putting values in the 'inidices' dynamic array described above.
-							 *Note that this loop increments with a step size equal to the blockSize value
-							 *which is the number of rows each thread will be handling.
-							 */
+	f = (float) (N - norm - 1) / numCPU;
+    	blockSize = (unsigned int) f; /*Calculating number of rows each thread will be handling.*/
+    	if (f > blockSize)
+            blockSize++;
+
+        vThreads = blockSize * numCPU; /*Adjusting number of threads for edge cases to eliminate empty threads*/
+        if (vThreads > (N-1))
+            numCPU--;
+
+        int tid; /*Variable to contain thread id pertaining to each thread.*/
+        #pragma omp parallel num_threads(numCPU) firstprivate(norm, blockSize) private(tid, multiplier) /*Launching threads in parallel
+                                                                                                         *to carry out implementation of the
+                                                                                                         *Naive-Gauss elimination algorithm.
+                                                                                                         *The number of thread launched is
+                                                                                                         *equal to the number of logical
+                                                                                                         *cores on the target machine.
+                                                                                                         *Each  thread gets its own copy of the
+                                                                                                         *norm variable which changes in the
+                                                                                                         *outer loop.
+                                                                                                         *Also, the blockSize variable i.e. the
+                                                                                                         *number of arrays each thread handles also
+                                                                                                         changes in each outer loop iteration and each
+                                                                                                         *thread also gets its copy of it.
+                                                                                                         */
         {
-            indices[3 * i] = row; /*First value storing the starting row index.*/
+            tid = omp_get_thread_num(); /*Getting thread id.*/
+            int startRow = norm + tid * blockSize + 1, col; /*Using thread id to calculate starting index of row
+                                                             *which the thread handles.
+                                                             */
+            int endRow = startRow + blockSize - 1; /*Using thread id to calculate ending index of row
+                                                    *which the thread handles.
+                                                    */
+            if (endRow >= N) /*Handling edge case when the final row pertaining to the thread is out of index range.*/
+                endRow = N - 1;
 
-            if ((row + blockSize - 1) < N) /*Second value stores the ending row index.*/
-                indices[3 * i + 1] = row + blockSize - 1;
-            else
-                indices[3 * i + 1] = N - 1;
-
-            indices[3 * i + 2] = norm; /*Third value stores value of current normalization row index.*/
-            i++;
-        }
-
-	numCPU = i; /*Ensures that number of threads launched is equal to the number of proceesing lbocks made.*/
-
-        for (i = 0; i < numCPU; i++)
-        {
-            pthread_create(rowThreads + i, NULL, processRows, (indices + 3 * i)); /*Launching each thread to operate on different parts of the array*/
-        }
-
-        for (i = 0; i < numCPU; i++)
-        {
-            pthread_join(*(rowThreads + i), NULL); /*Consolidating all threads*/
+            #pragma omp parallel for schedule(guided) /*Main part of each concurrent thread. This carries out the
+                                                       *Naive-Gauss Elimination for the set of rows pertaining to the thread.
+                                                       */
+            for (row = startRow; row <= endRow; row++) /*Iterating through each row in row set.*/
+            {
+                multiplier = A[row][norm] / A[norm][norm];
+                for (col = norm; col < N; col++)
+                {
+                    A[row][col] -= A[norm][col] * multiplier;
+                }
+                B[row] -= B[norm] * multiplier;
+            }
         }
     }
     /* (Diagonal elements are not normalized to 1.  This is treated in back
-     * substitution.)
-     */
+    * substitution.)
+    */
 
     /* Back substitution */
     for (row = N - 1; row >= 0; row--)
