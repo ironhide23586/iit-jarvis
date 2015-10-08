@@ -198,14 +198,6 @@ void *processRows(int *index) /*This part is executed in parallel by each thread
     }
 }
 
-<<<<<<< HEAD:Assignment Stuff/Final/hw2/gauss_pthreads.c
-/* In this parallel implementation, the array is processed sequentially in iterations of the normalization row.
-  * However, each iteration pertaining to the normalization row has been parallelized. The number of rows beneath
-  * the normalization row is divided between multiple threads whose number depends upon the number of logical processors
-  * present on the target machine.
-  * Furthermore, OpenMP's feature to easily parallelize rows has been employed here to parallelize the
-  * loop processing each row inside a thread hence implementing in essence, a sort of branched parallelism.
-=======
 /* In this parallel implementation, the array is processed sequentially in iterations of the normalization row because of 
   * existence of Read-After-Write dependency in the outer-most loop (with the iterating variable 'norm').
   * However, each iteration pertaining to the normalization row has been parallelized. The number of rows beneath
@@ -214,7 +206,6 @@ void *processRows(int *index) /*This part is executed in parallel by each thread
   * A dynamic array containing the row ranges for each thread is initialized. The starting memory address of the array blocks
   * pertaining to each thread is passed as an argument to each thread. The thread unpacks the values into variables
   * 'startRow', 'endRow' and 'norm' which are subsequently utilized for the computation process.
->>>>>>> 675f607a3c2b90381f5b4b23ccd52a7bf4d605bd:Assignment Stuff/Final/hw2/Final Codes/gauss_pthreads.c
   */
 void gauss_parallel() /*Function implementing a parallelized version of the Naive-Gauss elimination algorithm.*/
 {
