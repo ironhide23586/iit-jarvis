@@ -1,0 +1,51 @@
+
+Matrix dimension N = 5.
+
+Initializing...
+
+A =
+	12921.14, 8294.25, 51673.11, 26059.04, 39750.05;
+	144.14, 2865.42, 17864.01, 8454.73, 59465.29;
+	39647.56, 425.84, 63721.85, 24091.10, 47404.09;
+	52516.15, 10174.41, 33097.73, 19723.84, 24247.27;
+	16200.16, 1852.27, 35349.79, 12933.44, 57382.89;
+	
+B = [472.85; 14274.37; 24909.38; 31246.36; 61834.55]
+
+Starting clock.
+Computing in Parallel on 8 Logical cores
+Stopped clock.
+
+X = [ 0.24; 23.16; 11.65; -30.52; -0.04]
+
+Elapsed time = 1.147 ms.
+(CPU times are accurate to the nearest 0.001 ms)
+My total CPU time for parent = 0 ms.
+My system CPU time for parent = 0 ms.
+My total CPU time for child processes = 0 ms.
+--------------------------------------------
+
+
+Initializing...
+
+A =
+	12921.14, 8294.25, 51673.11, 26059.04, 39750.05;
+	144.14, 2865.42, 17864.01, 8454.73, 59465.29;
+	39647.56, 425.84, 63721.85, 24091.10, 47404.09;
+	52516.15, 10174.41, 33097.73, 19723.84, 24247.27;
+	16200.16, 1852.27, 35349.79, 12933.44, 57382.89;
+	
+B = [472.85; 14274.37; 24909.38; 31246.36; 61834.55]
+
+Starting clock.
+Computing Serially.
+Stopped clock.
+
+X = [ 0.24; 23.16; 11.65; -30.52; -0.04]
+
+Elapsed time = 0.002 ms.
+(CPU times are accurate to the nearest 0.001 ms)
+My total CPU time for parent = 0 ms.
+My system CPU time for parent = 0 ms.
+My total CPU time for child processes = 0 ms.
+--------------------------------------------
