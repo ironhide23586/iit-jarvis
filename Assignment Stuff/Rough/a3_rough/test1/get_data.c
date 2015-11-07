@@ -1,22 +1,22 @@
-/* get_data.c -- Parallel Trapezoidal Rule, uses basic Get_data function for 
+/* get_data.c -- Parallel Trapezoidal Rule, uses basic Get_data function for
 
  *     input.
 
  *
 
- * Input: 
+ * Input:
 
  *    a, b: limits of integration.
 
  *    n: number of trapezoids.
 
- * Output:  Estimate of the integral from a to b of f(x) 
+ * Output:  Estimate of the integral from a to b of f(x)
 
  *    using the trapezoidal rule and n trapezoids.
 
  *
 
- * Notes:  
+ * Notes:
 
  *    1.  f(x) is hardwired.
 
@@ -82,9 +82,9 @@ main(int argc, char** argv) {
     MPI_Status  status;
 
 
-    void Get_data(float* a_ptr, float* b_ptr, 
+    void Get_data(float* a_ptr, float* b_ptr,
 
-         int* n_ptr, int my_rank, int p);
+         int* n_ptr, int my_rank, int p, int max_rank);
 
     float Trap(float local_a, float local_b, int local_n,
 
@@ -103,8 +103,10 @@ main(int argc, char** argv) {
 
     MPI_Comm_size(MPI_COMM_WORLD, &p);
 
+    dest = p - 1;
 
-    Get_data(&a, &b, &n, my_rank, p);
+
+    Get_data(&a, &b, &n, my_rank, p, dest);
 
 
     h = (b-a)/n;    /* h is the same for all processes */
@@ -112,7 +114,7 @@ main(int argc, char** argv) {
     local_n = n/p;  /* So is the number of trapezoids */
 
 
-    /* Length of each process' interval of 
+    /* Length of each process' interval of
 
      * integration = local_n*h.  So my interval
 
@@ -125,25 +127,29 @@ main(int argc, char** argv) {
     integral = Trap(local_a, local_b, local_n, h);
 
 
-/* Add up the integrals calculated by each process */ 
+/* Add up the integrals calculated by each process */
 
-if (my_rank == 0) {
+if (my_rank == dest) {
 
         total = integral;
 
-        for (source = 1; source < p; source++) {
+        for (source = 0; source < p; source++) {
 
-            MPI_Recv(&integral, 1, MPI_FLOAT, source, tag, 
+            if (source != dest){
 
-                MPI_COMM_WORLD, &status);
+                MPI_Recv(&integral, 1, MPI_FLOAT, source, tag,
 
-            total = total + integral;
+                    MPI_COMM_WORLD, &status);
+
+                total = total + integral;
+
+            }
 
         }
 
-    } else {   
+    } else {
 
-        MPI_Send(&integral, 1, MPI_FLOAT, dest, 
+        MPI_Send(&integral, 1, MPI_FLOAT, dest,
 
             tag, MPI_COMM_WORLD);
 
@@ -152,15 +158,17 @@ if (my_rank == 0) {
 
     /* Print the result */
 
-    if (my_rank == 0) {
+    if (my_rank == dest) {
 
-        printf("With n = %d trapezoids, our estimate\n", 
+        printf("Process Rank = %d\n", my_rank);
+
+        printf("With n = %d trapezoids, our estimate\n",
 
             n);
 
-        printf("of the integral from %f to %f = %f\n", 
+        printf("of the integral from %f to %f = %f\n",
 
-            a, b, total); 
+            a, b, total);
 
     }
 
@@ -185,7 +193,7 @@ if (my_rank == 0) {
 
  *     2.  int p:  number of processes.
 
- * Output parameters:  
+ * Output parameters:
 
  *     1.  float* a_ptr:  pointer to left endpoint a.
 
@@ -195,11 +203,11 @@ if (my_rank == 0) {
 
  * Algorithm:
 
- *     1.  Process 0 prompts user for input and
+ *     1.  Process max_rank prompts user for input and
 
  *         reads in the values.
 
- *     2.  Process 0 sends input values to other
+ *     2.  Process max_rank sends input values to other
 
  *         processes.
 
@@ -207,18 +215,20 @@ if (my_rank == 0) {
 
 void Get_data(
 
-         float*  a_ptr    /* out */, 
+         float*  a_ptr    /* out */,
 
-         float*  b_ptr    /* out */, 
+         float*  b_ptr    /* out */,
 
          int*    n_ptr    /* out */,
 
-         int     my_rank  /* in  */, 
+         int     my_rank  /* in  */,
 
-         int     p        /* in  */) {
+         int     p        /* in  */,
+
+         int     max_rank) {
 
 
-    int source = 0;    /* All local variables used by */
+    int source = max_rank;    /* All local variables used by */
 
     int dest;          /* MPI_Send and MPI_Recv       */
 
@@ -227,31 +237,35 @@ void Get_data(
     MPI_Status status;
 
 
-    if (my_rank == 0){
+    if (my_rank == max_rank){
 
         *a_ptr = A;
         *b_ptr = B;
         *n_ptr = N;
 
-        for (dest = 1; dest < p; dest++){
+        for (dest = 0; dest < p; dest++){
 
-            tag = 0;
+            if (dest != max_rank){
 
-            MPI_Send(a_ptr, 1, MPI_FLOAT, dest, tag, 
+                tag = 0;
 
-                MPI_COMM_WORLD);
+                MPI_Send(a_ptr, 1, MPI_FLOAT, dest, tag,
 
-            tag = 1;
+                    MPI_COMM_WORLD);
 
-            MPI_Send(b_ptr, 1, MPI_FLOAT, dest, tag, 
+                tag = 1;
 
-                MPI_COMM_WORLD);
+                MPI_Send(b_ptr, 1, MPI_FLOAT, dest, tag,
 
-            tag = 2;
+                    MPI_COMM_WORLD);
 
-            MPI_Send(n_ptr, 1, MPI_INT, dest, tag, 
+                tag = 2;
 
-                MPI_COMM_WORLD);
+                MPI_Send(n_ptr, 1, MPI_INT, dest, tag,
+
+                    MPI_COMM_WORLD);
+
+            }
 
         }
 
@@ -259,19 +273,19 @@ void Get_data(
 
         tag = 0;
 
-        MPI_Recv(a_ptr, 1, MPI_FLOAT, source, tag, 
+        MPI_Recv(a_ptr, 1, MPI_FLOAT, source, tag,
 
             MPI_COMM_WORLD, &status);
 
         tag = 1;
 
-        MPI_Recv(b_ptr, 1, MPI_FLOAT, source, tag, 
+        MPI_Recv(b_ptr, 1, MPI_FLOAT, source, tag,
 
             MPI_COMM_WORLD, &status);
 
         tag = 2;
 
-        MPI_Recv(n_ptr, 1, MPI_INT, source, tag, 
+        MPI_Recv(n_ptr, 1, MPI_INT, source, tag,
 
                 MPI_COMM_WORLD, &status);
 
@@ -285,38 +299,38 @@ void Get_data(
 
 float Trap(
 
-          float  local_a   /* in */, 
+          float  local_a   /* in */,
 
-          float  local_b   /* in */, 
+          float  local_b   /* in */,
 
-          int    local_n   /* in */, 
+          int    local_n   /* in */,
 
-          float  h         /* in */) { 
+          float  h         /* in */) {
 
 
-    float integral;   /* Store result in integral  */ 
+    float integral;   /* Store result in integral  */
 
-    float x; 
+    float x;
 
-    int i; 
+    int i;
 
 
     float f(float x); /* function we're integrating */
 
 
-    integral = (f(local_a) + f(local_b))/2.0; 
+    integral = (f(local_a) + f(local_b))/2.0;
 
-    x = local_a; 
+    x = local_a;
 
-    for (i = 1; i <= local_n-1; i++) { 
+    for (i = 1; i <= local_n-1; i++) {
 
-        x = x + h; 
+        x = x + h;
 
-        integral = integral + f(x); 
+        integral = integral + f(x);
 
-    } 
+    }
 
-    integral = integral*h; 
+    integral = integral*h;
 
     return integral;
 
@@ -326,17 +340,17 @@ float Trap(
 
 /********************************************************************/
 
-float f(float x) { 
+float f(float x) {
 
-    float return_val; 
+    float return_val;
 
     /* Calculate f(x). */
 
-    /* Store calculation in return_val. */ 
+    /* Store calculation in return_val. */
 
     return_val = x*x;
 
-    return return_val; 
+    return return_val;
 
 } /* f */
 
