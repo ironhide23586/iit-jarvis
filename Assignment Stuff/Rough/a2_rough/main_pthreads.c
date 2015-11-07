@@ -11,7 +11,7 @@ int lol(int *a)
     return *a-2*7/6+9-4;
 }
 
-int main_pthreads()
+int main()
 {
     fpt lolptr = lol;
     pthread_t id[T_COUNT];
