@@ -130,27 +130,19 @@ int main(int argc, char **argv)
 
     MPI_Bcast (&A[0][0],(MAXN*MAXN),MPI_FLOAT,0,MPI_COMM_WORLD);
     MPI_Bcast (B,N,MPI_FLOAT,0,MPI_COMM_WORLD);
-/*
+
     for(i=0; i<N; i++)
     {
         map[i]= i % nprocs;
     }
-*/
-    for(k=0;k<(N - 1);k++)
+
+    for(k=0;k<N;k++)
     {
-        float f = (float) (N - k - 1) / nprocs;
-        int blockSize = (unsigned int) f; /*Calculating number of rows each thread will be handling.*/
-        if (f > blockSize)
-            blockSize++;
-
-
-
         //printf("******k = %d, RANK = %d*****************\n", k, rank);
-        MPI_Bcast (&A[k][k],N-k,MPI_FLOAT,rank,MPI_COMM_WORLD);
+        MPI_Bcast (&A[k][k],N-k,MPI_FLOAT,map[k],MPI_COMM_WORLD);
         //printf("******k = %d, RANK = %d*****************\n", k, rank);
-        MPI_Bcast (&B[k],1,MPI_FLOAT,rank,MPI_COMM_WORLD);
+        MPI_Bcast (&B[k],1,MPI_FLOAT,map[k],MPI_COMM_WORLD);
         //printf("******k = %d, RANK = %d*****************\n", k, rank);
-        /*
         for(i= k+1; i<N; i++)
         {
             //printf("i = %d\n", i);
@@ -158,27 +150,7 @@ int main(int argc, char **argv)
             {
                 c[i]=A[i][k]/A[k][k];
             }
-        }*/
-
-        int finalIndex = (rank + 1)*blockSize + k;
-        if (finalIndex >= N)
-            finalIndex = N - 1;
-        //printf("******k = %d, RANK = %d*****************\n", k, rank);
-        for (i = (rank*blockSize) + 1 + k; i <= finalIndex; i++)
-        {
-            c[i]=A[i][k]/A[k][k];
         }
-        //printf("******k = %d, RANK = %d*****************\n", k, rank);
-        for (i = (rank*blockSize) + 1 + k; i <= finalIndex; i++)
-        {
-            for(j=0;j<N;j++)
-            {
-                A[i][j]=A[i][j]-( c[i]*A[k][j] );
-            }
-            B[i]=B[i]-( c[i]*B[k] );
-        }
-        //MPI_Barrier(MPI_COMM_WORLD);
-        /*
         //printf("******k = %d, RANK = %d*****************\n", k, rank);
         for(i= k+1; i<N; i++)
         {
@@ -190,7 +162,7 @@ int main(int argc, char **argv)
                 }
                 B[i]=B[i]-( c[i]*B[k] );
             }
-        }*/
+        }
         //printf("******k = %d, RANK = %d*****************\n", k, rank);
     }
 
