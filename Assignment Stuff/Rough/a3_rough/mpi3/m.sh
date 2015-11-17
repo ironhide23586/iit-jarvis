@@ -1,4 +1,4 @@
 #!/bin/bash
 
-mpirun -n 8 ./prg 2000 
+mpirun -n 8 ./prg 5 
 
