@@ -116,26 +116,24 @@ void print_B() {
 
 __global__ void testKernel(float *d_A, float *d_B, size_t pitch_A, size_t pitch_B, int n, int fullBlock, int blockSize, int fragSize, int lastBlockStartRow)
 {
+    int tx, ty_base, i;
+    tx = blockIdx.x;
     if (fullBlock == 0)
     {
-        int tx = blockIdx.x, i;
-        int ty_base = threadIdx.x * fragSize + lastBlockStartRow;
+        ty_base = threadIdx.x * fragSize + lastBlockStartRow;
+    }
+    else
+    {
+        ty_base = (threadIdx.x + blockIdx.y * blockSize) * fragSize;
+    }
 
-        float *bElem, *aElem;
+    float *bElem, *aElem;
 
-        for (i = 0; i < fragSize; i++)
-        {
-            bElem = (float*)((char*)d_B + (pitch_B * (ty_base + i)));
-            aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
-            bElem[tx] = aElem[tx];
-        }
-
-        //float* bElem = (float*)((char*)d_B + (pitch_B * ty_base));
-        //float* aElem = (float*)((char*)d_A + (pitch_A * ty_base));
-        //printf("pitch = %d, start = %f\nElement at (%d, %d) = %f\n", pitch_A, *(aElem), tx, ty, aElem[tx]);
-        //printf("Element at (%d, %d) = %f\n", tx, ty, aElem[tx]);
-
-        //bElem[tx] = aElem[tx];
+    for (i = 0; i < fragSize; i++)
+    {
+        bElem = (float*)((char*)d_B + (pitch_B * (ty_base + i)));
+        aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
+        bElem[tx] = aElem[tx];
     }
 }
 
@@ -182,7 +180,8 @@ void matrixNorm_GPU()
     int blocksReqdPerCol = ceil_h_d((float) numElemsCol / (float) fullblockSize);
     int lastBlockSize = numElemsCol - (blocksReqdPerCol - 1) * fullblockSize;
 
-    int lastBlockStartRow = (blocksReqdPerCol - 1) * fullblockSize;
+    int lastBlockStartRow = (blocksReqdPerCol - 1) * fullblockSize * fragSize;
+    printf("Last Block start row = %d\n", lastBlockStartRow);
 
     float *d_A, *d_B;
 
@@ -220,15 +219,30 @@ void matrixNorm_GPU()
         }
     }
 
+    printf("********************************\n");
+
+    int k = 0;
+    for (i = 0; i < N; i++) ///Unflattening array returned from GPU
+    {
+        for (j = 0; j < N; j++)
+        {
+            if (A[i][j] != B[i][j])
+            {
+                printf("Matrices Unequal. Unequality at row %d, col %d;\nA[%d][%d]=%f, B[%d][%d]=%f\n", i, j, i, j, A[i][j], i, j, B[i][j]);
+                i = N;
+                j = N;
+                k = 1;
+                break;
+            }
+        }
+    }
+    if (k == 0)
+        printf("Array A & B are equal!!! :D\n");
+
     cudaDeviceSynchronize();
 
-    //printf("No. of MPs - %d\n", numMP);
-    //printf("No. of threads per MP - %d\n", numThreadsPerMP);
-    //printf("Warp Size - %d\n", warpSize);
-    //printf("Block Size - %d\n\n", fullblockSize);
-
-    printf("Blocks Reqd - %d\n", blocksReqdPerCol);
-    printf("Last Block Size - %d\n", lastBlockSize);
+    //printf("Blocks Reqd - %d\n", blocksReqdPerCol);
+    //printf("Last Block Size - %d\n", lastBlockSize);
 }
 
 
