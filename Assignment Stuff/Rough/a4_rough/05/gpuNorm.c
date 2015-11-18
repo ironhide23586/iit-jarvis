@@ -137,6 +137,40 @@ __global__ void testKernel(float *d_A, float *d_B, size_t pitch_A, size_t pitch_
     }
 }
 
+__global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch_B, int n, int fullBlock, int blockSize, int fragSize, int lastBlockStartRow)
+{
+    extern __shared__ float chunk[];
+    int tx, ty_base, i;
+    tx = blockIdx.x;
+    if (fullBlock == 0)
+    {
+        ty_base = threadIdx.x * fragSize + lastBlockStartRow;
+    }
+    else
+    {
+        ty_base = (threadIdx.x + blockIdx.y * blockSize) * fragSize;
+    }
+
+    float *bElem, *aElem;
+
+    for (i = 0; i < fragSize; i++)
+    {
+        //bElem = (float*)((char*)d_B + (pitch_B * (ty_base + i)));
+        aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
+        //bElem[tx] = aElem[tx];
+        chunk[threadIdx.x * fragSize + i] = aElem[tx];
+        //bElem[tx] = chunk[threadIdx.x];
+    }
+
+    for (i = 0; i < fragSize; i++)
+    {
+        bElem = (float*)((char*)d_B + (pitch_B * (ty_base + i)));
+        //aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
+        //bElem[tx] = aElem[tx];
+        bElem[tx] = chunk[threadIdx.x * fragSize + i];
+    }
+}
+
 int main(int argc, char **argv)
 {
     /* Process program parameters */
@@ -212,8 +246,11 @@ void matrixNorm_GPU()
     dim3 numFullBlocks(N, (blocksReqdPerCol - 1)); ///N cols, fullBlockReqd rows
 
     printf("********************************COPIED TO GPU & BEGINNING GPU KERNEL INVOCATION\n");
-    testKernel<<<numFullBlocks, fullblockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
-    testKernel<<<N, lastBlockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
+    //testKernel<<<numFullBlocks, fullblockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
+    //testKernel<<<N, lastBlockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
+
+    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
+    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
 
     printf("********************************END GPU WORK\n");
     cudaMemcpy2D(B_flat, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
