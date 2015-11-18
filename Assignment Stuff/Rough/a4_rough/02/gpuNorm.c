@@ -11,8 +11,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-#define BLOCKS_PER_MP 8
-
 /* Program Parameters */
 #define MAXN 8000  /* Max value of N */
 int N;  /* Matrix size */
@@ -116,30 +114,29 @@ void print_B() {
 }
 
 
-__global__ void testKernel(float *d_A, float *d_B, size_t pitch_A, size_t pitch_B, int n, int fullBlock, int blockSize, int fragSize)
+__global__ void testKernel(float *d_A, float *d_B, size_t pitch_A, size_t pitch_B, int n, int fullBlock, int blockSize, int fragSize, int lastBlockStartRow)
 {
-    //if (fullBlock == 0)
+    if (fullBlock == 0)
     {
-        int tx = blockIdx.x;
-        int ty = threadIdx.x * fragSize;
+        int tx = blockIdx.x, i;
+        int ty_base = threadIdx.x * fragSize + lastBlockStartRow;
 
-        //float* bElem = (float*)((char*)d_B + (pitch_B * tx));
-        float* aElem = (float*)(((char*)d_A) + (n*ty));
-        //if (ty <= 1)
+        float *bElem, *aElem;
 
-        printf("pitch = %d, start = %f\n", pitch_A, *(aElem));
-        printf("Element at (%d, %d) = %f\n", tx, ty, aElem[tx]);
+        for (i = 0; i < fragSize; i++)
+        {
+            bElem = (float*)((char*)d_B + (pitch_B * (ty_base + i)));
+            aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
+            bElem[tx] = aElem[tx];
+        }
+
+        //float* bElem = (float*)((char*)d_B + (pitch_B * ty_base));
+        //float* aElem = (float*)((char*)d_A + (pitch_A * ty_base));
+        //printf("pitch = %d, start = %f\nElement at (%d, %d) = %f\n", pitch_A, *(aElem), tx, ty, aElem[tx]);
+        //printf("Element at (%d, %d) = %f\n", tx, ty, aElem[tx]);
 
         //bElem[tx] = aElem[tx];
     }
-
-    //int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //int row = idx/n;
-
-    //int col = idx%n;
-
-    //d_B[row][col] = d_A[row][col];
 }
 
 int main(int argc, char **argv)
@@ -169,19 +166,23 @@ void matrixNorm_GPU()
     //int numThreadsPerMP = prop.maxThreadsPerMultiProcessor;
     //int warpSize = prop.warpSize;
 
-    int numMP = 15;
+    ///int numMP = 15;
+    ///int warpSize = 32;
+    int i, j;
     int numThreadsPerMP = 1536;
-    int warpSize = 32;
     int fragSize = 2;
+    int BLOCKS_PER_MP = 8;
 
-    int blockSize = numThreadsPerMP / BLOCKS_PER_MP;
+    int fullblockSize = numThreadsPerMP / BLOCKS_PER_MP;
 
     int numElemsCol = ceil_h_d((float) N / (float) fragSize);
 
     printf("CEIL(N/%d) = %d\n\n", fragSize, numElemsCol);
 
-    int blocksReqdPerCol = ceil_h_d((float) numElemsCol / (float) blockSize);
-    int lastBlockSize = numElemsCol - (blocksReqdPerCol - 1) * blockSize;
+    int blocksReqdPerCol = ceil_h_d((float) numElemsCol / (float) fullblockSize);
+    int lastBlockSize = numElemsCol - (blocksReqdPerCol - 1) * fullblockSize;
+
+    int lastBlockStartRow = (blocksReqdPerCol - 1) * fullblockSize;
 
     float *d_A, *d_B;
 
@@ -191,24 +192,43 @@ void matrixNorm_GPU()
     cudaMallocPitch(&d_A, &dev_pitch_A, N * sizeof(float), N * sizeof(float));
     cudaMallocPitch(&d_B, &dev_pitch_B, N * sizeof(float), N * sizeof(float));
 
-    cudaMemcpy2D(d_A, dev_pitch_A, A, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice);
+    float A_flat[N * N], B_flat[N * N];
+
+    for (i = 0; i < N; i++) ///Flattening out Array for transfer to GPU
+    {
+        for (j = 0; j < N; j++)
+        {
+            A_flat[j + i * N] = A[i][j];
+        }
+    }
+
+    if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
+        printf("ERROR");
 
     dim3 numFullBlocks(N, (blocksReqdPerCol - 1)); ///N cols, fullBlockReqd rows
 
-    testKernel<<<numFullBlocks, blockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, blockSize, fragSize);
-    testKernel<<<N, lastBlockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize);
+    testKernel<<<numFullBlocks, fullblockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
+    testKernel<<<N, lastBlockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
 
-    cudaMemcpy2D(B, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+    cudaMemcpy2D(B_flat, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+
+    for (i = 0; i < N; i++) ///Unflattening array returned from GPU
+    {
+        for (j = 0; j < N; j++)
+        {
+            B[i][j] = B_flat[j + i * N];
+        }
+    }
 
     cudaDeviceSynchronize();
 
     //printf("No. of MPs - %d\n", numMP);
     //printf("No. of threads per MP - %d\n", numThreadsPerMP);
     //printf("Warp Size - %d\n", warpSize);
-    //printf("Block Size - %d\n\n", blockSize);
+    //printf("Block Size - %d\n\n", fullblockSize);
 
-    printf("Blocks Reqd - %d\n", blocksReqdPerCol);
-    printf("Last Block Size - %d\n", lastBlockSize);
+    //printf("Blocks Reqd - %d\n", blocksReqdPerCol);
+    //printf("Last Block Size - %d\n", lastBlockSize);
 }
 
 
