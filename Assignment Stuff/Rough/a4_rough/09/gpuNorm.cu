@@ -138,24 +138,28 @@ __global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch
         chunk[localStartIndex + i] = aElem[tx];
     }
 
-    int inc = 1;
-
-
-    while(inc < n)
+    if (ty_base < (n - 1))
     {
-        if ((localStartIndex % (inc * fragSize)) == 0)
+        int inc = 1;
+        while(inc < n)
         {
-            for (i = localStartIndex + inc; (i < localStartIndex + fragSize * inc) && (i < (blockSize * fragSize)) && (i < n); i += inc)
+            if ((localStartIndex % (inc * fragSize)) == 0)
             {
-                //atomicAdd(&chunk[localStartIndex], chunk[i]);
-                chunk[localStartIndex] += chunk[i];
+                for (i = localStartIndex + inc; (i < localStartIndex + fragSize * inc) && (i < (blockSize * fragSize)) && (i < n); i += inc)
+                {
+                    //atomicAdd(&chunk[localStartIndex], chunk[i]);
+                    chunk[localStartIndex] += chunk[i];
+                    //printf("base = (%d, %d) chunk[%d] = %f, inc = %d\n", tx, ty_base, localStartIndex, chunk[localStartIndex], inc);
+                }
+                inc *= fragSize;
             }
-            inc *= fragSize;
+            else
+                break;
+            __syncthreads();
         }
-        else
-            break;
-        __syncthreads();
     }
+
+    //__syncthreads();
 
     for (i = 0; i < fragSize; i++)
     {
@@ -200,7 +204,7 @@ void matrixNorm_GPU()
     int BLOCKS_PER_MP = 8;
 
     int fullblockSize = numThreadsPerMP / BLOCKS_PER_MP;
-    //int fullblockSize = 1;
+    //int fullblockSize = 2;
 
     int numElemsCol = ceil_h_d((float) N / (float) fragSize);
 
