@@ -160,13 +160,15 @@ __global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch
         ty_base = (threadIdx.x + blockIdx.y * blockSize) * fragSize;
     }
 
-    float *bElem, *aElem;
+    float *bElem, *aElem;//, *aElemLocalBase, *bElemLocalBase;
 
     int localStartIndex = threadIdx.x * fragSize;
+
 
     for (i = 0; i < fragSize; i++)
     {
         aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
+        //aElem = d_A + n *
         chunk[localStartIndex + i] = aElem[tx];
     }
 
@@ -177,9 +179,15 @@ __global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch
         {
             if ((localStartIndex % (inc * fragSize)) == 0)
             {
+                //aElemLocalBase = (float*)((char*)d_A + (pitch_A * (ty_base)));
+                //bElemLocalBase = (float*)((char*)d_B + (pitch_B * (ty_base)));
+                //bElemLocalBase[tx] = aElemLocalBase[tx];
                 for (i = localStartIndex + inc; (i < localStartIndex + fragSize * inc) && (i < (blockSize * fragSize)) && (i < n); i += inc)
+                //for (i = localStartIndex + inc; (i < localStartIndex + fragSize * inc) && (i < (blockSize * fragSize)) && (i < n); i += inc)
                 {
                     chunk[localStartIndex] += chunk[i];
+                    //aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
+                    //bElemLocalBase[tx] += aElem[tx];
                 }
                 inc *= fragSize;
             }
@@ -192,7 +200,9 @@ __global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch
     for (i = 0; i < fragSize; i++)
     {
         bElem = (float*)((char*)d_B + (pitch_B * (ty_base + i)));
+        //aElem = (float*)((char*)d_A + (pitch_A * (ty_base + i)));
         bElem[tx] = chunk[localStartIndex + i];
+        //bElem[tx] = aElem[tx];
     }
 }
 
@@ -260,6 +270,11 @@ __global__ void computeNorms(float *d_A, size_t pitch_A, float *d_Avgs, float *d
         aElem[tx] = 0;
 }
 
+__global__ void dummy()
+{
+
+}
+
 int main(int argc, char **argv)
 {
     /* Timing variables */
@@ -277,6 +292,8 @@ int main(int argc, char **argv)
 
     /* Print input matrices */
     print_inputs();
+
+    dummy<<<1, 1>>>();
 
     /* Start GPU Clock */
     printf("\nStarting GPU clock.\n");
@@ -305,7 +322,7 @@ int main(int argc, char **argv)
     print_inputs();
 
     /* Start CPU Clock */
-    printf("\nStarting GPU clock.\n");
+    printf("\nStarting CPU clock.\n");
     gettimeofday(&etstart, &tzdummy);
     etstart2 = times(&cputstart);
 
@@ -314,7 +331,7 @@ int main(int argc, char **argv)
     /* Stop CPU Clock */
     gettimeofday(&etstop, &tzdummy);
     etstop2 = times(&cputstop);
-    printf("Stopped GPU clock.\n");
+    printf("Stopped CPU clock.\n");
     usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
     usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
 
@@ -331,7 +348,7 @@ int main(int argc, char **argv)
     {
         for (j = 0; j < N; j++)
         {
-            if (abs(B_GPU[i][j]-B_CPU[i][j]) > 0.5)
+            if (abs(B_GPU[i][j]-B_CPU[i][j]) > 0.000005f)
             {
                 printf("\nMatrices Unequal. Unequality at row %d, col %d;\nB_GPU[%d][%d]=%f, B_CPU[%d][%d]=%f\n", i, j, i, j, B_GPU[i][j], i, j, B_CPU[i][j]);
                 i = N;
@@ -358,9 +375,18 @@ void matrixNorm_GPU()
 
     ///int numMP = 15;
     ///int warpSize = 32;
+
+    /* Timing variables */
+    struct timeval etstart, etstop;  /* Elapsed times using gettimeofday() */
+    struct timezone tzdummy;
+    clock_t etstart2, etstop2;  /* Elapsed times using times() */
+    unsigned long long usecstart, usecstop;
+    struct tms cputstart, cputstop;  /* CPU times for my processes */
+
+
     int i, j;
     int numThreadsPerMP = 1536;
-    int fragSize = 5;
+    int fragSize = 10;
     int BLOCKS_PER_MP = 8;
 
     int fullblockSize = numThreadsPerMP / BLOCKS_PER_MP;
@@ -377,13 +403,64 @@ void matrixNorm_GPU()
     size_t dev_pitch_A, dev_pitch_B;
     size_t host_pitch = N * sizeof(float);
 
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     cudaMallocPitch(&d_A, &dev_pitch_A, N * sizeof(float), N * sizeof(float));
     cudaMallocPitch(&d_B, &dev_pitch_B, N * sizeof(float), N * sizeof(float));
+
+    //cudaMalloc((void **)&d_A, (N * N * sizeof(float)));
+    //cudaMalloc((void **)&d_B, (N * N * sizeof(float)));
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed GPU 2D Memory Allocation time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
 
     cudaMalloc((void **)&d_Avgs, N * sizeof(float));
     cudaMalloc((void **)&d_Vars, N * sizeof(float));
 
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed GPU 1D Memory Allocation time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
+
     float A_flat[N * N], B_flat[N * N];
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
 
     for (i = 0; i < N; i++) ///Flattening out Array for transfer to GPU
     {
@@ -393,20 +470,102 @@ void matrixNorm_GPU()
         }
     }
 
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed A flattening time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
         printf("ERROR");
 
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed A transfer to GPU time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
     dim3 numFullBlocks(N, (blocksReqdPerCol - 1)); ///N cols, fullBlockReqd rows
+
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
 
     computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
     computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
+
+    //computeSums<<<numFullBlocks, fullblockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
+    //computeSums<<<N, lastBlockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed computeSums time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
 
     int numFinalSumBlocksReqd = ceil_h_d((float) N / (float) fullblockSize);
     int lastFinalSumBlockSize = N - (numFinalSumBlocksReqd - 1) * fullblockSize;
     int lastBlockStartCol = (numFinalSumBlocksReqd - 1) * fullblockSize;
 
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
     computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed computeFinalSums time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
 
     int numVarBlocksPerCol = ceil_h_d((float) N / (float) fullblockSize);
     int lastVarBlockSize = N - (numVarBlocksPerCol - 1) * fullblockSize;
@@ -414,22 +573,150 @@ void matrixNorm_GPU()
 
     dim3 numFullVarBlocks(N, (numVarBlocksPerCol - 1));
 
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     computeVarianceSquares<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 0, fullblockSize, lastVarBlockStartRow);
     computeVarianceSquares<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 1, lastVarBlockSize, lastVarBlockStartRow);
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed computeVarianceSquares time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
 
     computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
     computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
 
+    //computeSums<<<numFullBlocks, fullblockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
+    //computeSums<<<N, lastBlockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed computeSums (Variance Summing) time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
     computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed computeFinalSums (Variance Final Average) time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
 
     if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
         printf("ERROR");
 
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed A GPU refresh after variance calculation time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     computeNorms<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 0, fullblockSize, lastVarBlockStartRow);
     computeNorms<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 1, lastVarBlockSize, lastVarBlockStartRow);
 
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed computeNorms time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     cudaMemcpy2D(B_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed B transfer to CPU time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
+
+
+
+
+
+    /* Start Clock */
+    //printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
 
     for (i = 0; i < N; i++) ///Unflattening array returned from GPU
     {
@@ -438,6 +725,16 @@ void matrixNorm_GPU()
             B_GPU[i][j] = B_flat[j + i * N];
         }
     }
+
+    /* Stop Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    //printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+    /* Display timing results */
+    printf("\nElapsed B unflattening time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
 }
 
 
