@@ -265,7 +265,7 @@ __global__ void computeNorms(float *d_A, size_t pitch_A, float *d_Avgs, float *d
     float *aElem = (float *)((char *)d_A + (pitch_A * ty));
 
     if (d_Vars[tx] != 0)
-        aElem[tx] = (aElem[tx] - d_Avgs[tx])/d_Vars[tx];
+        aElem[tx] = (aElem[tx] - d_Avgs[tx])/sqrt(d_Vars[tx]);
     else
         aElem[tx] = 0;
 }
@@ -293,7 +293,7 @@ int main(int argc, char **argv)
     /* Print input matrices */
     print_inputs();
 
-    dummy<<<1, 1>>>();
+    dummy<<<1, 1>>>(); ///DEVICE INITIALIZATION
 
     /* Start GPU Clock */
     printf("\nStarting GPU clock.\n");
@@ -313,6 +313,7 @@ int main(int argc, char **argv)
     print_B_GPU();
 
     /* Display timing results */
+    float t_GPU = (float)(usecstop - usecstart)/(float)1000;
     printf("\nElapsed GPU time = %g ms.\n",
     (float)(usecstop - usecstart)/(float)1000);
 
@@ -342,6 +343,8 @@ int main(int argc, char **argv)
     printf("\nElapsed CPU time = %g ms.\n",
     (float)(usecstop - usecstart)/(float)1000);
 
+    float t_CPU = (float)(usecstop - usecstart)/(float)1000;
+
     /* Error Checking */
     int k = 0, i, j;
     for (i = 0; i < N; i++)
@@ -361,20 +364,27 @@ int main(int argc, char **argv)
     }
     if (k == 0)
         printf("\nArray B_GPU & B_CPU are equal!!! :D\n");
+
+    float speedup = t_CPU / t_GPU;
+    printf("\nSpeedup = %f\n", speedup);
 }
 
 void matrixNorm_GPU()
 {
     ///SEGMENTATION FAULT AT N=1254
-    //cudaDeviceProp prop;
-    //cudaGetDeviceProperties(&prop, 0);
 
-    //int numMP = prop.multiProcessorCount;
-    //int numThreadsPerMP = prop.maxThreadsPerMultiProcessor;
-    //int warpSize = prop.warpSize;
+    int fragSize = 10;
+    int BLOCKS_PER_MP = 8;
+    //int numThreadsPerMP = 1536;
 
-    ///int numMP = 15;
-    ///int warpSize = 32;
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    int numThreadsPerMP = prop.maxThreadsPerMultiProcessor;
+
+    int fullblockSize = numThreadsPerMP / BLOCKS_PER_MP;
+
+    int i, j;
 
     /* Timing variables */
     struct timeval etstart, etstop;  /* Elapsed times using gettimeofday() */
@@ -382,14 +392,6 @@ void matrixNorm_GPU()
     clock_t etstart2, etstop2;  /* Elapsed times using times() */
     unsigned long long usecstart, usecstop;
     struct tms cputstart, cputstop;  /* CPU times for my processes */
-
-
-    int i, j;
-    int numThreadsPerMP = 1536;
-    int fragSize = 10;
-    int BLOCKS_PER_MP = 8;
-
-    int fullblockSize = numThreadsPerMP / BLOCKS_PER_MP;
 
     int numElemsCol = ceil_h_d((float) N / (float) fragSize);
 
@@ -753,6 +755,7 @@ void matrixNorm() {
         for (row=0; row < N; row++)
             sigma += powf(A[row][col] - mu, 2.0);
         sigma /= (float) N;
+        sigma = sqrt(sigma);
         for (row=0; row < N; row++) {
             if (sigma == 0.0)
                 B_CPU[row][col] = 0.0;
