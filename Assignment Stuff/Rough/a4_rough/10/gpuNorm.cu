@@ -147,9 +147,7 @@ __global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch
             {
                 for (i = localStartIndex + inc; (i < localStartIndex + fragSize * inc) && (i < (blockSize * fragSize)) && (i < n); i += inc)
                 {
-                    //atomicAdd(&chunk[localStartIndex], chunk[i]);
                     chunk[localStartIndex] += chunk[i];
-                    //printf("base = (%d, %d) chunk[%d] = %f, inc = %d\n", tx, ty_base, localStartIndex, chunk[localStartIndex], inc);
                 }
                 inc *= fragSize;
             }
@@ -159,12 +157,35 @@ __global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch
         }
     }
 
-    //__syncthreads();
-
     for (i = 0; i < fragSize; i++)
     {
         bElem = (float*)((char*)d_B + (pitch_B * (ty_base + i)));
         bElem[tx] = chunk[localStartIndex + i];
+    }
+}
+
+__global__ void computeFinalSums(float *d_B, size_t pitch_B, int n, int ifLastBlock, int prevBlockSize, int lastBlockStartCol)
+{
+    int tx, i;
+    float *bElem, *bElemBase;
+
+    bElemBase = (float *)((char *)d_B);
+
+    if (ifLastBlock == 0)
+    {
+        tx = blockIdx.x * blockDim.x + threadIdx.x;
+    }
+    else
+    {
+        tx = lastBlockStartCol + threadIdx.x;
+    }
+
+    for (i = prevBlockSize; i < n; i += prevBlockSize)
+    {
+        //printf("i = %d\n(%d, %d)\n", i, tx, i);
+        bElem = (float *)((char *)d_B + (pitch_B * i));
+        //bElem[tx] = 0;
+        bElemBase[tx] += bElem[tx];
     }
 }
 
@@ -244,11 +265,20 @@ void matrixNorm_GPU()
     dim3 numFullBlocks(N, (blocksReqdPerCol - 1)); ///N cols, fullBlockReqd rows
 
     printf("********************************COPIED TO GPU & BEGINNING GPU KERNEL INVOCATION\n");
-    //testKernel<<<numFullBlocks, fullblockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
-    //testKernel<<<N, lastBlockSize>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
 
     computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
     computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
+
+    int numFinalSumBlocksReqd = ceil_h_d((float) N / (float) fullblockSize);
+    int lastFinalSumBlockSize = N - (numFinalSumBlocksReqd - 1) * fullblockSize;
+    int lastBlockStartCol = (numFinalSumBlocksReqd - 1) * fullblockSize;
+
+    printf("********************************COMPUTING FINAL AVERAGE\n");
+
+    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol);
+    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol);
+
+    cudaDeviceSynchronize();
 
     printf("********************************END GPU WORK\n");
     cudaMemcpy2D(B_flat, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
@@ -284,8 +314,6 @@ void matrixNorm_GPU()
 
     cudaDeviceSynchronize();
 
-    //printf("Blocks Reqd - %d\n", blocksReqdPerCol);
-    //printf("Last Block Size - %d\n", lastBlockSize);
 }
 
 
