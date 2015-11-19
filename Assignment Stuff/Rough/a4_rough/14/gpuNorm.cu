@@ -262,6 +262,13 @@ __global__ void computeNorms(float *d_A, size_t pitch_A, float *d_Avgs, float *d
 
 int main(int argc, char **argv)
 {
+    /* Timing variables */
+    struct timeval etstart, etstop;  /* Elapsed times using gettimeofday() */
+    struct timezone tzdummy;
+    clock_t etstart2, etstop2;  /* Elapsed times using times() */
+    unsigned long long usecstart, usecstop;
+    struct tms cputstart, cputstop;  /* CPU times for my processes */
+
     /* Process program parameters */
     parameters(argc, argv);
 
@@ -271,20 +278,52 @@ int main(int argc, char **argv)
     /* Print input matrices */
     print_inputs();
 
+    /* Start GPU Clock */
+    printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     matrixNorm_GPU();
+
+    /* Stop GPU Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
 
     /* Display output */
     print_B_GPU();
+
+    /* Display timing results */
+    printf("\nElapsed GPU time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
 
     printf("\n===========================================================================\n");
 
     /* Print input matrices */
     print_inputs();
 
+    /* Start CPU Clock */
+    printf("\nStarting GPU clock.\n");
+    gettimeofday(&etstart, &tzdummy);
+    etstart2 = times(&cputstart);
+
     matrixNorm();
+
+    /* Stop CPU Clock */
+    gettimeofday(&etstop, &tzdummy);
+    etstop2 = times(&cputstop);
+    printf("Stopped GPU clock.\n");
+    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
 
     /* Display output */
     print_B_CPU();
+
+    /* Display timing results */
+    printf("\nElapsed CPU time = %g ms.\n",
+    (float)(usecstop - usecstart)/(float)1000);
 
     /* Error Checking */
     int k = 0, i, j;
@@ -292,9 +331,6 @@ int main(int argc, char **argv)
     {
         for (j = 0; j < N; j++)
         {
-            //printf("%f, ", abs(B_GPU[i][j]-B_CPU[i][j]));
-
-            //if (B_GPU[i][j] != B_CPU[i][j])
             if (abs(B_GPU[i][j]-B_CPU[i][j]) > 0.5)
             {
                 printf("\nMatrices Unequal. Unequality at row %d, col %d;\nB_GPU[%d][%d]=%f, B_CPU[%d][%d]=%f\n", i, j, i, j, B_GPU[i][j], i, j, B_CPU[i][j]);
@@ -305,7 +341,6 @@ int main(int argc, char **argv)
             }
 
         }
-        //printf("\n");
     }
     if (k == 0)
         printf("\nArray B_GPU & B_CPU are equal!!! :D\n");
@@ -325,28 +360,23 @@ void matrixNorm_GPU()
     ///int warpSize = 32;
     int i, j;
     int numThreadsPerMP = 1536;
-    int fragSize = 10;
+    int fragSize = 5;
     int BLOCKS_PER_MP = 8;
 
     int fullblockSize = numThreadsPerMP / BLOCKS_PER_MP;
-    //int fullblockSize = 2;
 
     int numElemsCol = ceil_h_d((float) N / (float) fragSize);
-
-    //printf("CEIL(N/%d) = %d\n\n", fragSize, numElemsCol);
 
     int blocksReqdPerCol = ceil_h_d((float) numElemsCol / (float) fullblockSize);
     int lastBlockSize = numElemsCol - (blocksReqdPerCol - 1) * fullblockSize;
 
     int lastBlockStartRow = (blocksReqdPerCol - 1) * fullblockSize * fragSize;
-    //printf("Last Block start row = %d\n", lastBlockStartRow);
 
     float *d_A, *d_B, *d_Avgs, *d_Vars;
 
     size_t dev_pitch_A, dev_pitch_B;
     size_t host_pitch = N * sizeof(float);
 
-    //printf("********************************START MEMORY ALLOCATION\n");
     cudaMallocPitch(&d_A, &dev_pitch_A, N * sizeof(float), N * sizeof(float));
     cudaMallocPitch(&d_B, &dev_pitch_B, N * sizeof(float), N * sizeof(float));
 
@@ -355,9 +385,6 @@ void matrixNorm_GPU()
 
     float A_flat[N * N], B_flat[N * N];
 
-    //float Avgs[N], Vars[N];
-
-    //printf("********************************START FLATTENING\n");
     for (i = 0; i < N; i++) ///Flattening out Array for transfer to GPU
     {
         for (j = 0; j < N; j++)
@@ -366,13 +393,10 @@ void matrixNorm_GPU()
         }
     }
 
-    //printf("********************************END FLATTENING\n");
     if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
         printf("ERROR");
 
     dim3 numFullBlocks(N, (blocksReqdPerCol - 1)); ///N cols, fullBlockReqd rows
-
-    //printf("********************************COPIED TO GPU & BEGINNING GPU KERNEL INVOCATION\n");
 
     computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
     computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
@@ -381,12 +405,8 @@ void matrixNorm_GPU()
     int lastFinalSumBlockSize = N - (numFinalSumBlocksReqd - 1) * fullblockSize;
     int lastBlockStartCol = (numFinalSumBlocksReqd - 1) * fullblockSize;
 
-    //printf("********************************COMPUTING FINAL AVERAGE\n");
-
     computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
     computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
-
-    //printf("********************************COMPUTING VARIANCE DIFFERENCE SQUARES\n");
 
     int numVarBlocksPerCol = ceil_h_d((float) N / (float) fullblockSize);
     int lastVarBlockSize = N - (numVarBlocksPerCol - 1) * fullblockSize;
@@ -397,55 +417,19 @@ void matrixNorm_GPU()
     computeVarianceSquares<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 0, fullblockSize, lastVarBlockStartRow);
     computeVarianceSquares<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 1, lastVarBlockSize, lastVarBlockStartRow);
 
-    //printf("********************************COMPUTING VARIANCE AVERAGE\n");
-
     computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
     computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
-
-    //printf("********************************COMPUTING FINAL VARIANCE AVERAGE\n");
 
     computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
     computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
 
-    cudaDeviceSynchronize();
-
     if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
         printf("ERROR");
-
-    //printf("********************************COMPUTING FINAL NORMS\n");
 
     computeNorms<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 0, fullblockSize, lastVarBlockStartRow);
     computeNorms<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 1, lastVarBlockSize, lastVarBlockStartRow);
 
-    cudaDeviceSynchronize();
-    //printf("********************************END GPU WORK\n");
-    //cudaMemcpy2D(B_flat, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
-
-    //cudaMemcpy2D(A_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
-
     cudaMemcpy2D(B_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
-
-    //cudaMemcpy(Avgs, d_Avgs, N * sizeof(float), cudaMemcpyDeviceToHost);
-
-    //cudaMemcpy(Vars, d_Vars, N * sizeof(float), cudaMemcpyDeviceToHost);
-
-    //printf("********************************COPIED BACK TO HOST\n");
-
-    /*
-    printf("Averages-\n[");
-    for (i = 0; i < N; i++)
-    {
-        printf("%f,", Avgs[i]);
-    }
-    printf("]\n");
-
-    printf("Average Variances-\n[");
-    for (i = 0; i < N; i++)
-    {
-        printf("%f,", Vars[i]);
-    }
-    printf("]\n");
-    */
 
     for (i = 0; i < N; i++) ///Unflattening array returned from GPU
     {
@@ -454,8 +438,6 @@ void matrixNorm_GPU()
             B_GPU[i][j] = B_flat[j + i * N];
         }
     }
-
-    //printf("********************************FINISHED UNFLATTENING\n");
 }
 
 
