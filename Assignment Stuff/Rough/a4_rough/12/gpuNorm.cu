@@ -191,7 +191,7 @@ __global__ void computeFinalSums(float *d_B, size_t pitch_B, int n, int ifLastBl
 
 __global__ void computeVarianceSquares(float *d_A, size_t pitch_A, float *d_Avgs, int n, int ifLastBlock, int blockSize, int lastBlockStartRow)
 {
-    int tx, ty, i;
+    int tx, ty;
     tx = blockIdx.x;
     if (ifLastBlock == 1)
     {
@@ -207,6 +207,27 @@ __global__ void computeVarianceSquares(float *d_A, size_t pitch_A, float *d_Avgs
     aElem[tx] = pow((aElem[tx] - d_Avgs[tx]), 2);
 }
 
+__global__ void computeNorms(float *d_A, size_t pitch_A, float *d_Avgs, float *d_Vars, int n, int ifLastBlock, int blockSize, int lastBlockStartRow)
+{
+    int tx, ty;
+    tx = blockIdx.x;
+    if (ifLastBlock == 1)
+    {
+        ty = threadIdx.x + lastBlockStartRow;
+    }
+    else
+    {
+        ty = threadIdx.x + blockIdx.y * blockSize;
+    }
+
+    float *aElem = (float *)((char *)d_A + (pitch_A * ty));
+
+    if (d_Vars[tx] != 0)
+        aElem[tx] = (aElem[tx] - d_Avgs[tx])/d_Vars[tx];
+    else
+        aElem[tx] = 0;
+}
+
 int main(int argc, char **argv)
 {
     /* Process program parameters */
@@ -219,12 +240,21 @@ int main(int argc, char **argv)
     print_inputs();
 
     matrixNorm_GPU();
-    //matrixNorm();
 
     /* Display output */
-    //print_B();
+    print_B();
 
+    printf("\n===========================================================================\n");
+
+    /* Print input matrices */
     print_inputs();
+
+    matrixNorm();
+
+    /* Display output */
+    print_B();
+
+    //print_inputs();
 }
 
 void matrixNorm_GPU()
@@ -319,10 +349,6 @@ void matrixNorm_GPU()
     computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
     computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
 
-    //int numFinalSumBlocksReqd = ceil_h_d((float) N / (float) fullblockSize);
-    //int lastFinalSumBlockSize = N - (numFinalSumBlocksReqd - 1) * fullblockSize;
-    //int lastBlockStartCol = (numFinalSumBlocksReqd - 1) * fullblockSize;
-
     printf("********************************COMPUTING FINAL VARIANCE AVERAGE\n");
 
     computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
@@ -330,10 +356,21 @@ void matrixNorm_GPU()
 
     cudaDeviceSynchronize();
 
+    if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
+        printf("ERROR");
+
+    printf("********************************COMPUTING FINAL NORMS\n");
+
+    computeNorms<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 0, fullblockSize, lastVarBlockStartRow);
+    computeNorms<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 1, lastVarBlockSize, lastVarBlockStartRow);
+
+    cudaDeviceSynchronize();
     printf("********************************END GPU WORK\n");
     //cudaMemcpy2D(B_flat, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
 
-    cudaMemcpy2D(A_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+    //cudaMemcpy2D(A_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+
+    cudaMemcpy2D(B_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
 
     cudaMemcpy(Avgs, d_Avgs, N * sizeof(float), cudaMemcpyDeviceToHost);
 
@@ -355,7 +392,7 @@ void matrixNorm_GPU()
     }
     printf("]\n");
 
-    /*
+
     for (i = 0; i < N; i++) ///Unflattening array returned from GPU
     {
         for (j = 0; j < N; j++)
@@ -363,7 +400,8 @@ void matrixNorm_GPU()
             B[i][j] = B_flat[j + i * N];
         }
     }
-    */
+
+    /*
     for (i = 0; i < N; i++) ///Unflattening array returned from GPU
     {
         for (j = 0; j < N; j++)
@@ -371,7 +409,7 @@ void matrixNorm_GPU()
             A[i][j] = A_flat[j + i * N];
         }
     }
-
+    */
     printf("********************************FINISHED UNFLATTENING\n");
 
     int k = 0;
@@ -392,7 +430,7 @@ void matrixNorm_GPU()
     if (k == 0)
         printf("Array A & B are equal!!! :D\n");
 
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
 
 }
 
