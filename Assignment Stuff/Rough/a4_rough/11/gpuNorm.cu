@@ -164,7 +164,7 @@ __global__ void computeSums(float *d_A, float *d_B, size_t pitch_A, size_t pitch
     }
 }
 
-__global__ void computeFinalSums(float *d_B, size_t pitch_B, int n, int ifLastBlock, int prevBlockSize, int lastBlockStartCol)
+__global__ void computeFinalSums(float *d_B, size_t pitch_B, int n, int ifLastBlock, int prevBlockSize, int lastBlockStartCol, float *d_Avgs)
 {
     int tx, i;
     float *bElem, *bElemBase;
@@ -182,11 +182,29 @@ __global__ void computeFinalSums(float *d_B, size_t pitch_B, int n, int ifLastBl
 
     for (i = prevBlockSize; i < n; i += prevBlockSize)
     {
-        //printf("i = %d\n(%d, %d)\n", i, tx, i);
         bElem = (float *)((char *)d_B + (pitch_B * i));
-        //bElem[tx] = 0;
         bElemBase[tx] += bElem[tx];
     }
+    bElemBase[tx] /= n;
+    d_Avgs[tx] = bElemBase[tx];
+}
+
+__global__ void computeVarianceSquares(float *d_A, size_t pitch_A, float *d_Avgs, int n, int ifLastBlock, int blockSize, int lastBlockStartRow)
+{
+    int tx, ty, i;
+    tx = blockIdx.x;
+    if (ifLastBlock == 1)
+    {
+        ty = threadIdx.x + lastBlockStartRow;
+    }
+    else
+    {
+        ty = threadIdx.x + blockIdx.y * blockSize;
+    }
+
+    float *aElem = (float *)((char *)d_A + (pitch_A * ty));
+
+    aElem[tx] = pow((aElem[tx] - d_Avgs[tx]), 2);
 }
 
 int main(int argc, char **argv)
@@ -204,7 +222,9 @@ int main(int argc, char **argv)
     //matrixNorm();
 
     /* Display output */
-    print_B();
+    //print_B();
+
+    print_inputs();
 }
 
 void matrixNorm_GPU()
@@ -237,7 +257,7 @@ void matrixNorm_GPU()
     int lastBlockStartRow = (blocksReqdPerCol - 1) * fullblockSize * fragSize;
     printf("Last Block start row = %d\n", lastBlockStartRow);
 
-    float *d_A, *d_B;
+    float *d_A, *d_B, *d_Avgs, *d_Vars;
 
     size_t dev_pitch_A, dev_pitch_B;
     size_t host_pitch = N * sizeof(float);
@@ -246,7 +266,12 @@ void matrixNorm_GPU()
     cudaMallocPitch(&d_A, &dev_pitch_A, N * sizeof(float), N * sizeof(float));
     cudaMallocPitch(&d_B, &dev_pitch_B, N * sizeof(float), N * sizeof(float));
 
+    cudaMalloc((void **)&d_Avgs, N * sizeof(float));
+    cudaMalloc((void **)&d_Vars, N * sizeof(float));
+
     float A_flat[N * N], B_flat[N * N];
+
+    float Avgs[N], Vars[N];
 
     printf("********************************START FLATTENING\n");
     for (i = 0; i < N; i++) ///Flattening out Array for transfer to GPU
@@ -275,20 +300,75 @@ void matrixNorm_GPU()
 
     printf("********************************COMPUTING FINAL AVERAGE\n");
 
-    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol);
-    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol);
+    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
+    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
+
+    printf("********************************COMPUTING VARIANCE DIFFERENCE SQUARES\n");
+
+    int numVarBlocksPerCol = ceil_h_d((float) N / (float) fullblockSize);
+    int lastVarBlockSize = N - (numVarBlocksPerCol - 1) * fullblockSize;
+    int lastVarBlockStartRow = (numVarBlocksPerCol - 1) * fullblockSize;
+
+    dim3 numFullVarBlocks(N, (numVarBlocksPerCol - 1));
+
+    computeVarianceSquares<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 0, fullblockSize, lastVarBlockStartRow);
+    computeVarianceSquares<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 1, lastVarBlockSize, lastVarBlockStartRow);
+
+    printf("********************************COMPUTING VARIANCE AVERAGE\n");
+
+    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fullblockSize, fragSize, lastBlockStartRow);
+    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, lastBlockSize, fragSize, lastBlockStartRow);
+
+    //int numFinalSumBlocksReqd = ceil_h_d((float) N / (float) fullblockSize);
+    //int lastFinalSumBlockSize = N - (numFinalSumBlocksReqd - 1) * fullblockSize;
+    //int lastBlockStartCol = (numFinalSumBlocksReqd - 1) * fullblockSize;
+
+    printf("********************************COMPUTING FINAL VARIANCE AVERAGE\n");
+
+    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
+    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
 
     cudaDeviceSynchronize();
 
     printf("********************************END GPU WORK\n");
-    cudaMemcpy2D(B_flat, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+    //cudaMemcpy2D(B_flat, host_pitch, d_B, dev_pitch_B, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+
+    cudaMemcpy2D(A_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+
+    cudaMemcpy(Avgs, d_Avgs, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaMemcpy(Vars, d_Vars, N * sizeof(float), cudaMemcpyDeviceToHost);
 
     printf("********************************COPIED BACK TO HOST\n");
+
+    printf("Averages-\n[");
+    for (i = 0; i < N; i++)
+    {
+        printf("%f,", Avgs[i]);
+    }
+    printf("]\n");
+
+    printf("Average Variances-\n[");
+    for (i = 0; i < N; i++)
+    {
+        printf("%f,", Vars[i]);
+    }
+    printf("]\n");
+
+    /*
     for (i = 0; i < N; i++) ///Unflattening array returned from GPU
     {
         for (j = 0; j < N; j++)
         {
             B[i][j] = B_flat[j + i * N];
+        }
+    }
+    */
+    for (i = 0; i < N; i++) ///Unflattening array returned from GPU
+    {
+        for (j = 0; j < N; j++)
+        {
+            A[i][j] = A_flat[j + i * N];
         }
     }
 
