@@ -1,6 +1,10 @@
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
+/* Matrix normalization.
+ * Compile with "gcc matrixNorm.c"
+ */
+
+/* ****** ADD YOUR CODE AT THE END OF THIS FILE. ******
+ * You need not submit the provided code.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,18 +18,15 @@
 /* Program Parameters */
 #define MAXN 8000  /* Max value of N */
 int N;  /* Matrix size */
-float A[MAXN][MAXN], B[MAXN][MAXN];
 
-float B_GPU[MAXN][MAXN], B_CPU[MAXN][MAXN];
+/* Matrices */
+volatile float A[MAXN][MAXN], B[MAXN][MAXN];
 
 /* junk */
 #define randm() 4|2[uid]&3
 
 /* Prototype */
 void matrixNorm_GPU();
-
-/* Prototype */
-void matrixNorm();
 
 __global__ void blank_function();
 
@@ -77,8 +78,6 @@ void initialize_inputs() {
     for (row = 0; row < N; row++) {
       A[row][col] = (float)rand() / 32768.0;
       B[row][col] = 0.0;
-      B_GPU[row][col] = 0.0;
-      B_CPU[row][col] = 0.0;
     }
   }
 
@@ -101,8 +100,7 @@ void print_inputs() {
 void print_B() {
     int row, col;
 
-    if (N < 10)
-    {
+    if (N < 10) {
         printf("\nB =\n\t");
         for (row = 0; row < N; row++) {
             for (col = 0; col < N; col++) {
@@ -112,130 +110,76 @@ void print_B() {
     }
 }
 
-void print_B_GPU() {
-    int row, col;
+int main(int argc, char **argv) {
 
-    if (N < 10)
-    {
-        printf("\nB_GPU =\n\t");
-        for (row = 0; row < N; row++) {
-            for (col = 0; col < N; col++) {
-                printf("%1.10f%s", B_GPU[row][col], (col < N-1) ? ", " : ";\n\t");
-            }
-        }
-    }
+  blank_function<<<1, 1>>>(); /* Blank Function (defined below) having no content which is simply used to initialize CUDA environment as it is implicitly initialized on first call and this delay is not caused by parallelized algorithm.
+                                 For reference, follow this link - https://devtalk.nvidia.com/default/topic/392429/first-cudamalloc-takes-long-time-/ */
+  /* Timing variables */
+  struct timeval etstart, etstop;  /* Elapsed times using gettimeofday() */
+  struct timezone tzdummy;
+  clock_t etstart2, etstop2;  /* Elapsed times using times() */
+  unsigned long long usecstart, usecstop;
+  struct tms cputstart, cputstop;  /* CPU times for my processes */
+
+  /* Process program parameters */
+  parameters(argc, argv);
+
+  /* Initialize A and B */
+  initialize_inputs();
+
+  /* Print input matrices */
+  print_inputs();
+
+  /* Start Clock */
+  printf("\nStarting clock.\n");
+  gettimeofday(&etstart, &tzdummy);
+  etstart2 = times(&cputstart);
+
+  /* Gaussian Elimination */
+  matrixNorm_GPU();
+
+  /* Stop Clock */
+  gettimeofday(&etstop, &tzdummy);
+  etstop2 = times(&cputstop);
+  printf("Stopped clock.\n");
+  usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
+  usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
+
+  /* Display output */
+  print_B();
+
+  /* Display timing results */
+  printf("\nElapsed time = %g ms.\n",
+	 (float)(usecstop - usecstart)/(float)1000);
+
+  printf("(CPU times are accurate to the nearest %g ms)\n",
+	 1.0/(float)CLOCKS_PER_SEC * 1000.0);
+  printf("My total CPU time for parent = %g ms.\n",
+	 (float)( (cputstop.tms_utime + cputstop.tms_stime) -
+		  (cputstart.tms_utime + cputstart.tms_stime) ) /
+	 (float)CLOCKS_PER_SEC * 1000);
+  printf("My system CPU time for parent = %g ms.\n",
+	 (float)(cputstop.tms_stime - cputstart.tms_stime) /
+	 (float)CLOCKS_PER_SEC * 1000);
+  printf("My total CPU time for child processes = %g ms.\n",
+	 (float)( (cputstop.tms_cutime + cputstop.tms_cstime) -
+		  (cputstart.tms_cutime + cputstart.tms_cstime) ) /
+	 (float)CLOCKS_PER_SEC * 1000);
+      /* Contrary to the man pages, this appears not to include the parent */
+  printf("--------------------------------------------\n");
+
+  exit(0);
 }
 
-void print_B_CPU() {
-    int row, col;
+/* ------------------ Above Was Provided --------------------- */
 
-    if (N < 10)
-    {
-        printf("\nB_CPU =\n\t");
-        for (row = 0; row < N; row++) {
-            for (col = 0; col < N; col++) {
-                printf("%1.10f%s", B_CPU[row][col], (col < N-1) ? ", " : ";\n\t");
-            }
-        }
-    }
-}
+/****** You will replace this routine with your own parallel version *******/
+/* Provided global variables are MAXN, N, A[][] and B[][],
+ * defined in the beginning of this code.  B[][] is initialized to zeros.
+ */
 
-
-int main(int argc, char **argv)
-{
-    /* Timing variables */
-    struct timeval etstart, etstop;  /* Elapsed times using gettimeofday() */
-    struct timezone tzdummy;
-    clock_t etstart2, etstop2;  /* Elapsed times using times() */
-    unsigned long long usecstart, usecstop;
-    struct tms cputstart, cputstop;  /* CPU times for my processes */
-
-    blank_function<<<1, 1>>>();
-    /* Process program parameters */
-    parameters(argc, argv);
-
-    /* Initialize A and B */
-    initialize_inputs();
-
-    /* Print input matrices */
-    print_inputs();
-
-    /* Start GPU Clock */
-    printf("\nStarting GPU clock.\n");
-    gettimeofday(&etstart, &tzdummy);
-    etstart2 = times(&cputstart);
-
-    matrixNorm_GPU();
-
-    /* Stop GPU Clock */
-    gettimeofday(&etstop, &tzdummy);
-    etstop2 = times(&cputstop);
-    printf("Stopped GPU clock.\n");
-    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
-    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
-
-    /* Display output */
-    print_B_GPU();
-
-    /* Display timing results */
-    printf("\nElapsed GPU time = %g ms.\n",
-    (float)(usecstop - usecstart)/(float)1000);
-
-    float t_GPU = (float)(usecstop - usecstart)/(float)1000;
-
-    printf("\n===========================================================================\n");
-
-    /* Print input matrices */
-    print_inputs();
-
-    /* Start CPU Clock */
-    printf("\nStarting CPU clock.\n");
-    gettimeofday(&etstart, &tzdummy);
-    etstart2 = times(&cputstart);
-
-    matrixNorm();
-
-    /* Stop CPU Clock */
-    gettimeofday(&etstop, &tzdummy);
-    etstop2 = times(&cputstop);
-    printf("Stopped CPU clock.\n");
-    usecstart = (unsigned long long)etstart.tv_sec * 1000000 + etstart.tv_usec;
-    usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
-
-    /* Display output */
-    print_B_CPU();
-
-    /* Display timing results */
-    printf("\nElapsed CPU time = %g ms.\n",
-    (float)(usecstop - usecstart)/(float)1000);
-
-    float t_CPU = (float)(usecstop - usecstart)/(float)1000;
-
-    printf("\nSPEEDUP = %f\n", t_CPU / t_GPU);
-
-    /* Error Checking */
-    int k = 0, i, j;
-    for (i = 0; i < N; i++)
-    {
-        for (j = 0; j < N; j++)
-        {
-            if (abs(B_GPU[i][j]-B_CPU[i][j]) > 0.5)
-            {
-                printf("\nMatrices Unequal. Unequality at row %d, col %d;\nB_GPU[%d][%d]=%f, B_CPU[%d][%d]=%f\nSOLUTION INCORRECT\n", i, j, i, j, B_GPU[i][j], i, j, B_CPU[i][j]);
-                i = N;
-                j = N;
-                k = 1;
-                break;
-            }
-
-        }
-    }
-    if (k == 0)
-        printf("\nArray B_GPU & B_CPU are equal.\nSOLUTION IS CORRECT\n");
-}
-
-
-
+/* Blank function which is called at first as the first call to any CUDA kernel or function implicitly initializes the CUDA environment.
+For reference, follow this link - https://devtalk.nvidia.com/default/topic/392429/first-cudamalloc-takes-long-time-/ */
 __global__ void blank_function()
 {
 
@@ -413,20 +357,15 @@ void matrixNorm_GPU()
     size_t host_pitch = N * sizeof(float);
 
     /* Allocating memory for 2D arrays on GPU */
-    //printf("DONE\n");
     cudaMallocPitch(&d_A, &dev_pitch_A, N * sizeof(float), N * sizeof(float));
     cudaMallocPitch(&d_B, &dev_pitch_B, N * sizeof(float), N * sizeof(float));
 
     /* Allocating memory for 1D arrays on GPU */
-    printf("DONE\n");
     cudaMalloc((void **)&d_Avgs, N * sizeof(float));
-    printf("DONE\n");
     cudaMalloc((void **)&d_Vars, N * sizeof(float));
-    printf("DONE\n");
+
     /* Allocating memory for flattened 1D array on Host */
-    //float A_flat[N * N];//, B_flat[N * N];
-    float *A_flat = (float *)malloc(N * N * sizeof(float));
-    printf("DONE\n");
+    float A_flat[N * N], B_flat[N * N];
 
     /* Flattening 2D array on host to a 1D array for transfer to GPU */
     for (i = 0; i < N; i++)
@@ -444,23 +383,16 @@ void matrixNorm_GPU()
     dim3 numFullBlocks(N, (blocksReqdPerCol - 1));
 
     /* Parallel computation of sums of each sum fragment in each column. */
-    //computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fragSize, lastBlockStartRow);
-    //computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, fragSize, lastBlockStartRow);
-
-    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 1, fragSize, lastBlockStartRow);
-    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 0, fragSize, lastBlockStartRow);
-
+    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fragSize, lastBlockStartRow);
+    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, fragSize, lastBlockStartRow);
 
     int numFinalSumBlocksReqd = ceil_h_d((float) N / (float) fullblockSize);
     int lastFinalSumBlockSize = N - (numFinalSumBlocksReqd - 1) * fullblockSize;
     int lastBlockStartCol = (numFinalSumBlocksReqd - 1) * fullblockSize;
 
     /* Parallel computation of averages of each column which is stored in array d_Avgs. */
-    //computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
-    //computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
-
-    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_A, dev_pitch_A, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
-    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_A, dev_pitch_A, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
+    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
+    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
 
     int numVarBlocksPerCol = ceil_h_d((float) N / (float) fullblockSize);
     int lastVarBlockSize = N - (numVarBlocksPerCol - 1) * fullblockSize;
@@ -468,27 +400,17 @@ void matrixNorm_GPU()
 
     dim3 numFullVarBlocks(N, (numVarBlocksPerCol - 1));
 
-    //////////////////////////////
-    if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
-        printf("ERROR");
-
     /* Parallel computation of variances of each column which is  stored in array d_Vars */
     computeVarianceSquares<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 0, lastVarBlockStartRow);
     computeVarianceSquares<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 1, lastVarBlockStartRow);
 
     /* Parallel computation of sums of variances in each column. */
-    //computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fragSize, lastBlockStartRow);
-    //computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, fragSize, lastBlockStartRow);
-
-    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 1, fragSize, lastBlockStartRow);
-    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 0, fragSize, lastBlockStartRow);
+    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fragSize, lastBlockStartRow);
+    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, fragSize, lastBlockStartRow);
 
     /* Parallel computation of averages of variances in each column */
-    //computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
-    //computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
-
-    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_A, dev_pitch_A, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
-    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_A, dev_pitch_A, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
+    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
+    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
 
     /* Refreshing GPU's copy of array A with original copy from host as it has changed. */
     if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
@@ -499,44 +421,14 @@ void matrixNorm_GPU()
     computeNorms<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 1, lastVarBlockStartRow);
 
     /* Copying result back to host. */
-    cudaMemcpy2D(A_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+    cudaMemcpy2D(B_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
 
-    cudaFree(d_A);
-    //cudaFree(d_B);
-    cudaFree(d_Avgs);
-    cudaFree(d_Vars);
     /* Unflattening returned array from 1D to 2D. */
     for (i = 0; i < N; i++) ///Unflattening array returned from GPU
     {
         for (j = 0; j < N; j++)
         {
-            B_GPU[i][j] = A_flat[j + i * N];
+            B[i][j] = B_flat[j + i * N];
         }
     }
-}
-
-
-void matrixNorm() {
-  int row, col;
-  float mu, sigma; // Mean and Standard Deviation
-
-  printf("\nComputing Serially.\n");
-
-    for (col=0; col < N; col++) {
-        mu = 0.0;
-        for (row=0; row < N; row++)
-            mu += A[row][col];
-        mu /= (float) N;
-        sigma = 0.0;
-        for (row=0; row < N; row++)
-            sigma += powf(A[row][col] - mu, 2.0);
-        sigma /= (float) N;
-        for (row=0; row < N; row++) {
-            if (sigma == 0.0)
-                B_CPU[row][col] = 0.0;
-            else
-                B_CPU[row][col] = (A[row][col] - mu) / sqrt(sigma);
-        }
-    }
-
 }
