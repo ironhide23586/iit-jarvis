@@ -334,6 +334,7 @@ __host__ __device__ int ceil_h_d(float f)
 /* Function to calculate the normalized values of a matrix, implemented on GPU. */
 void matrixNorm_GPU()
 {
+    /* Getting Device Properties of GPU to scale performance according to GPU specs. */
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
 
@@ -351,21 +352,20 @@ void matrixNorm_GPU()
 
     int lastBlockStartRow = (blocksReqdPerCol - 1) * fullblockSize * fragSize; /* Getting the starting row index of the chunk of array being handled by the final thread block */
 
-    float *d_A, *d_B, *d_Avgs, *d_Vars; /* Declaring device pointers */
+    float *d_A, *d_Avgs, *d_Vars; /* Declaring device pointers */
 
-    size_t dev_pitch_A, dev_pitch_B;
+    size_t dev_pitch_A;
     size_t host_pitch = N * sizeof(float);
 
     /* Allocating memory for 2D arrays on GPU */
     cudaMallocPitch(&d_A, &dev_pitch_A, N * sizeof(float), N * sizeof(float));
-    cudaMallocPitch(&d_B, &dev_pitch_B, N * sizeof(float), N * sizeof(float));
 
     /* Allocating memory for 1D arrays on GPU */
     cudaMalloc((void **)&d_Avgs, N * sizeof(float));
     cudaMalloc((void **)&d_Vars, N * sizeof(float));
 
     /* Allocating memory for flattened 1D array on Host */
-    float A_flat[N * N], B_flat[N * N];
+    float *A_flat = (float *)malloc(N * N * sizeof(float));
 
     /* Flattening 2D array on host to a 1D array for transfer to GPU */
     for (i = 0; i < N; i++)
@@ -383,16 +383,17 @@ void matrixNorm_GPU()
     dim3 numFullBlocks(N, (blocksReqdPerCol - 1));
 
     /* Parallel computation of sums of each sum fragment in each column. */
-    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fragSize, lastBlockStartRow);
-    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, fragSize, lastBlockStartRow);
+    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 1, fragSize, lastBlockStartRow);
+    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 0, fragSize, lastBlockStartRow);
+
 
     int numFinalSumBlocksReqd = ceil_h_d((float) N / (float) fullblockSize);
     int lastFinalSumBlockSize = N - (numFinalSumBlocksReqd - 1) * fullblockSize;
     int lastBlockStartCol = (numFinalSumBlocksReqd - 1) * fullblockSize;
 
     /* Parallel computation of averages of each column which is stored in array d_Avgs. */
-    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
-    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
+    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_A, dev_pitch_A, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
+    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_A, dev_pitch_A, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Avgs);
 
     int numVarBlocksPerCol = ceil_h_d((float) N / (float) fullblockSize);
     int lastVarBlockSize = N - (numVarBlocksPerCol - 1) * fullblockSize;
@@ -400,17 +401,21 @@ void matrixNorm_GPU()
 
     dim3 numFullVarBlocks(N, (numVarBlocksPerCol - 1));
 
+    /* Refreshing GPU's copy of array A with original copy from host as it has changed. */
+    if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
+        printf("ERROR");
+
     /* Parallel computation of variances of each column which is  stored in array d_Vars */
     computeVarianceSquares<<<numFullVarBlocks, fullblockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 0, lastVarBlockStartRow);
     computeVarianceSquares<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, N, 1, lastVarBlockStartRow);
 
     /* Parallel computation of sums of variances in each column. */
-    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 1, fragSize, lastBlockStartRow);
-    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_B, dev_pitch_A, dev_pitch_B, N, 0, fragSize, lastBlockStartRow);
+    computeSums<<<numFullBlocks, fullblockSize, (fullblockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 1, fragSize, lastBlockStartRow);
+    computeSums<<<N, lastBlockSize, (lastBlockSize * sizeof(float) * fragSize)>>>(d_A, d_A, dev_pitch_A, dev_pitch_A, N, 0, fragSize, lastBlockStartRow);
 
     /* Parallel computation of averages of variances in each column */
-    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_B, dev_pitch_B, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
-    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_B, dev_pitch_B, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
+    computeFinalSums<<<(numFinalSumBlocksReqd - 1), fullblockSize>>>(d_A, dev_pitch_A, N, 0, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
+    computeFinalSums<<<1, lastFinalSumBlockSize>>>(d_A, dev_pitch_A, N, 1, (fullblockSize * fragSize), lastBlockStartCol, d_Vars);
 
     /* Refreshing GPU's copy of array A with original copy from host as it has changed. */
     if (cudaMemcpy2D(d_A, dev_pitch_A, A_flat, host_pitch, N * sizeof(float), N, cudaMemcpyHostToDevice)!= cudaSuccess)
@@ -421,14 +426,19 @@ void matrixNorm_GPU()
     computeNorms<<<N, lastVarBlockSize>>>(d_A, dev_pitch_A, d_Avgs, d_Vars, N, 1, lastVarBlockStartRow);
 
     /* Copying result back to host. */
-    cudaMemcpy2D(B_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+    cudaMemcpy2D(A_flat, host_pitch, d_A, dev_pitch_A, N * sizeof(float), N, cudaMemcpyDeviceToHost);
+
+    /* Freeing Memory on GPU */
+    cudaFree(d_A);
+    cudaFree(d_Avgs);
+    cudaFree(d_Vars);
 
     /* Unflattening returned array from 1D to 2D. */
     for (i = 0; i < N; i++) ///Unflattening array returned from GPU
     {
         for (j = 0; j < N; j++)
         {
-            B[i][j] = B_flat[j + i * N];
+            B[i][j] = A_flat[j + i * N];
         }
     }
 }
