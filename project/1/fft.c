@@ -96,25 +96,25 @@ void c_fft1d(complex *r, int      n, int      isign)
 
 void parseToComplex(complex target[N][N], float data[N][N])
 {
-    int i, j;
-    for (i = 0; i < N; i++)
+    int a, b;
+    for (a = 0; a < N; a++)
     {
-        for (j = 0; j < N; j++)
+        for (b = 0; b < N; b++)
         {
-            target[i][j].r = data[i][j];
-            target[i][j].i = 0;
+            target[a][b].r = data[a][b];
+            target[a][b].i = 0;
         }
     }
 }
 
 void parseToReal(float target[N][N], complex data[N][N])
 {
-    int i, j;
-    for (i = 0; i < N; i++)
+    int a, b;
+    for (a = 0; a < N; a++)
     {
-        for (j = 0; j < N; j++)
+        for (b = 0; b < N; b++)
         {
-            target[i][j] = data[i][j].r;
+            target[a][b] = data[a][b].r;
         }
     }
 }
@@ -125,18 +125,45 @@ void readFile(const char *fname, float data[N][N])
     FILE *fp;
     fp = fopen(fname, "r");
     for (i = 0; i < N; i++)
+    {
         for(j = 0; j < N; j++)
             fscanf(fp, "%g", &data[i][j]);
+    }
+    fclose(fp);
+}
+
+void writeFile(const char *fname, float data[N][N])
+{
+    int i, j;
+    FILE *fp;
+    fp = fopen(fname, "w");
+    for (i = 0; i < N; i++)
+    {
+        for(j = 0; j < N; j++)
+        {
+            fprintf(fp, "%6.2g\t", data[i][j]);
+        }
+        fprintf(fp, "\n");
+    }
+    fclose(fp);
 }
 
 void transpose(complex inp[N][N])
 {
-    int i, j;
-    for (i = 0; i < N; i++)
+    int a, b;
+    float tmp_r, tmp_i;
+    for (a = 0; a < N; a++)
     {
-        for (j = i + 1; j < N; j++)
+        for (b = a + 1; b < N; b++)
         {
-            C_SWAP(inp[i][j], inp[j][i]);
+            //C_SWAP(inp[a][b], inp[b][a]);
+            tmp_r = inp[a][b].r;
+            inp[a][b].r = inp[b][a].r;
+            inp[b][a].r = tmp_r;
+
+            tmp_i = inp[a][b].i;
+            inp[a][b].i = inp[b][a].i;
+            inp[b][a].i = tmp_i;
         }
     }
 }
@@ -159,17 +186,18 @@ void c_fft2d_serial(complex inp[N][N])
 void c_inv_fft2d_serial(complex inp[N][N])
 {
     int i, j;
-    transpose(inp);
-    for (i = 0; i < N; i++)
-    {
-        c_fft1d(&inp[i][0], N, 1);
-    }
-    transpose(inp);
-    for (i = 0; i < N; i++)
-    {
-        c_fft1d(&inp[i][0], N, 1);
-    }
     //transpose(inp);
+    for (i = 0; i < N; i++)
+    {
+        c_fft1d(&inp[i][0], N, +1);
+    }
+
+    transpose(inp);
+    for (i = 0; i < N; i++)
+    {
+        c_fft1d(&inp[i][0], N, +1);
+    }
+    transpose(inp);
 }
 
 void pointMul_serial(complex inpA[N][N], complex inpB[N][N])
@@ -180,20 +208,53 @@ void pointMul_serial(complex inpA[N][N], complex inpB[N][N])
         for (b = 0; b < N; b++)
         {
             inpA[a][b].r *= inpB[a][b].r;
-            //inpA[a][b].i *= inpB[a][b].i;
+            inpA[a][b].i *= inpB[a][b].i;
         }
     }
+}
+
+void print2DMatrix(float mat[N][N])
+{
+    int i, j;
+    for (i = 0; i < N; i++)
+    {
+        for(j = 0; j < N; j++)
+        {
+            printf("%f\t", mat[i][j]);
+        }
+        printf("\n");
+    }
+}
+
+void checkIfEqual(float matA[N][N], float matB[N][N])
+{
+    int i, j;
+    for (i = 0; i < N; i++)
+    {
+        for(j = 0; j < N; j++)
+        {
+            if (matA[i][j] != matB[i][j])
+            {
+                printf("Answer Incorrect :(\nMismatch at i=%d, j=%d\ntarget[%d][%d]=%f, computed[%d][%d]=%f\n", i, j, i, j, matB[i][j], i, j, matA[i][j]);
+                return;
+            }
+        }
+    }
+    printf("Correct Solution! :D\n");
 }
 
 int main()
 {
     float dataA[N][N], dataB[N][N], dataD[N][N];
-    int i, j;
+    //int i, j;
+
     complex A[N][N], B[N][N];
 
     readFile("2_im1", dataA);
     readFile("2_im2", dataB);
     readFile("out_2", dataD);
+
+    //print2DMatrix(dataA);
 
     //readFile("1_im1", dataA);
     //readFile("1_im2", dataB);
@@ -212,26 +273,7 @@ int main()
     float D[N][N];
     parseToReal(D, A);
 
-    for (i = 0; i < N; i++)
-    {
-        for(j = 0; j < N; j++)
-        {
-            printf("%f\t", D[i][j]);
-        }
-        printf("\n");
-    }
+    //print2DMatrix(D);
 
-    for (i = 0; i < N; i++)
-    {
-        for(j = 0; j < N; j++)
-        {
-
-            if (D[i][j] != dataD[i][j])
-            {
-                printf("Answer Incorrect :(\nMismatch at i=%d, j=%d\ntarget[%d][%d]=%f, computed[%d][%d]=%f\n", i, j, i, j, dataD[i][j], i, j, D[i][j]);
-                return 0;
-            }
-        }
-    }
-    printf("Correct Solution! :D\n");
+    checkIfEqual(D, dataD);
 }
