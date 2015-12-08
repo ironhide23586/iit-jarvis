@@ -24,7 +24,7 @@ static complex ctmp;
 #define C_SWAP(a,b) {ctmp=(a);(a)=(b);(b)=ctmp;}
 #define N 512
 
-#define N_lol 8
+#define N_lol 10
 
 void c_fft1d(complex *r, int      n, int      isign)
 {
@@ -276,14 +276,7 @@ void compute()
 
 
 
-void lolop(complex *arr, int n)
-{
-    int a, b;
-    for(a = 0; a < n; a++)
-    {
-        arr[a].r = 0;
-    }
-}
+
 
 
 void func1(complex inp[N_lol][N_lol])
@@ -315,6 +308,15 @@ void print2DMatrixComp(complex mat[N_lol][N_lol])
     }
 }
 
+void lolop(complex *arr, int n)
+{
+    int a, b;
+    for(a = 0; a < n; a++)
+    {
+        arr[a].r = 13.4;
+        arr[a].i = 3.14;
+    }
+}
 
 void processChunk(float *rData, complex *myChunk, int blockSizeRows)
 {
@@ -340,6 +342,10 @@ int main(int argc, int **argv)
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+    MPI_Datatype mpi_complex;
+    MPI_Type_contiguous(2, MPI_FLOAT, &mpi_complex);
+    MPI_Type_commit(&mpi_complex);
 
     int i, j, blockSizeRows;
     blockSizeRows = ceil(N_lol / (float)nprocs);
@@ -372,120 +378,59 @@ int main(int argc, int **argv)
         }
         printf("++++++++++++++++++++++\n");
 
-
-
-        printf("\nProcess %d received -\n", rank);
+        complex *megaChunk = (complex *)malloc(N_lol * N_lol * sizeof(complex));
         for (i = 0; i < blockSizeRows; i++)
         {
             for (j = 0; j < N_lol; j++)
             {
-                printf("%g\t", lol1[i][j]);
+                megaChunk[i * N_lol + j].r = lol1[i][j];
+                megaChunk[i * N_lol + j].i = 0;
+            }
+        }
+
+        for (i = 0; i < blockSizeRows; i++)
+        {
+            lolop(&megaChunk[i * N_lol], N_lol);
+        }
+
+
+        for (i = 1; i < nprocs - 1; i++)
+        {
+            MPI_Recv(&megaChunk[i * N_lol * blockSizeRows], blockSizeRows * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
+
+        MPI_Recv(&megaChunk[(nprocs - 1) * N_lol * blockSizeRows], lastBlockSize * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        for (i = 0; i < N_lol; i++)
+        {
+            for (j = 0; j < N_lol; j++)
+            {
+                printf("%e\t", megaChunk[i * N_lol + j].i);
             }
             printf("\n");
         }
-        printf("***********************************\n");
-
-
-        complex *myChunk = (complex *)malloc(blockSizeRows * N_lol * sizeof(complex));
-        for (i = 0; i < blockSizeRows; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                myChunk[i * N_lol + j].r = lol1[i][j];
-                myChunk[i * N_lol + j].i = 0;
-            }
-        }
-
-
-        for (i = 0; i < blockSizeRows; i++)
-        {
-            lolop(&myChunk[i * N_lol], N_lol);
-        }
-
-        printf("\nProcess %d converted matrix to -\n", rank);
-        for (i = 0; i < blockSizeRows; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%g\t", myChunk[i * N_lol + j].r);
-            }
-            printf("\n");
-        }
-        printf("***********************************\n");
     }
-
-
-
 
 
     if (rank > 0 & rank < (nprocs - 1))
     {
         float *rData = (float *)malloc(N_lol * blockSizeRows * sizeof(float));
-        complex *myChunk = (complex *)malloc(blockSizeRows * N_lol * sizeof(complex));
+        int chunkMemSize = blockSizeRows * N_lol * sizeof(complex);
+        complex *myChunk = (complex *)malloc(chunkMemSize);
         MPI_Recv(rData, N_lol * blockSizeRows, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-
-
-        printf("\nProcess %d received -\n", rank);
-        for (i = 0; i < blockSizeRows; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%g\t", rData[i * N_lol + j]);
-            }
-            printf("\n");
-        }
-        printf("***********************************\n");
-
         processChunk(rData, myChunk, blockSizeRows);
-
-        printf("\nProcess %d converted matrix to -\n", rank);
-        for (i = 0; i < blockSizeRows; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%g\t", myChunk[i * N_lol + j].r);
-            }
-            printf("\n");
-        }
-        printf("***********************************\n");
+        MPI_Send(myChunk, blockSizeRows * N_lol, mpi_complex, 0, 0, MPI_COMM_WORLD);
     }
-
-
-
-
 
 
     if (rank == nprocs - 1)
     {
         float *rData = (float *)malloc(N_lol * lastBlockSize * sizeof(float));
-        complex *myChunk = (complex *)malloc(lastBlockSize * N_lol * sizeof(complex));
+        int chunkMemSize = lastBlockSize * N_lol * sizeof(complex);
+        complex *myChunk = (complex *)malloc(chunkMemSize);
         MPI_Recv(rData, N_lol * lastBlockSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        printf("\nProcess %d received -\n", rank);
-        for (i = 0; i < lastBlockSize; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%g\t", rData[i * N_lol + j]);
-            }
-            printf("\n");
-        }
-
-        printf("***********************************\n");
-
         processChunk(rData, myChunk, lastBlockSize);
-
-        printf("\nProcess %d converted matrix to -\n", rank);
-        for (i = 0; i < lastBlockSize; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%g\t", myChunk[i * N_lol + j].r);
-            }
-            printf("\n");
-        }
-        printf("***********************************\n");
+        MPI_Send(myChunk, lastBlockSize * N_lol, mpi_complex, 0, 0, MPI_COMM_WORLD);
     }
 
     MPI_Finalize();
