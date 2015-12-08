@@ -24,8 +24,6 @@ static complex ctmp;
 #define C_SWAP(a,b) {ctmp=(a);(a)=(b);(b)=ctmp;}
 #define N 512
 
-#define N_lol 10
-
 void c_fft1d(complex *r, int      n, int      isign)
 {
    int     m,i,i1,j,k,i2,l,l1,l2;
@@ -96,47 +94,20 @@ void c_fft1d(complex *r, int      n, int      isign)
    }
 }
 
-
-
-void parseToComplex(complex target[N][N], float data[N][N])
+void readFileComplex(const char *fname, complex *data)
 {
-    int a, b;
-    for (a = 0; a < N; a++)
-    {
-        for (b = 0; b < N; b++)
-        {
-            target[a][b].r = data[a][b];
-            target[a][b].i = 0;
-        }
-    }
-}
-
-void parseToReal(float target[N][N], complex data[N][N])
-{
-    int a, b;
-    for (a = 0; a < N; a++)
-    {
-        for (b = 0; b < N; b++)
-        {
-            target[a][b] = data[a][b].r;
-        }
-    }
-}
-
-void readFile(const char *fname, float data[N][N])
-{
-    int i, j;
+    int i, sz = N * N;
     FILE *fp;
     fp = fopen(fname, "r");
-    for (i = 0; i < N; i++)
+    for (i = 0; i < sz; i++)
     {
-        for(j = 0; j < N; j++)
-            fscanf(fp, "%g", &data[i][j]);
+        fscanf(fp, "%g", &(data[i].r));
+        data[i].i = 0;
     }
     fclose(fp);
 }
 
-void writeFile(const char *fname, float data[N][N])
+void writeFileComplex(const char *fname, complex *data)
 {
     int i, j;
     FILE *fp;
@@ -145,238 +116,82 @@ void writeFile(const char *fname, float data[N][N])
     {
         for(j = 0; j < N; j++)
         {
-            fprintf(fp, "%6.2g\t", data[i][j]);
+            fprintf(fp, "%6.2g\t", data[i * N + j].r);
         }
         fprintf(fp, "\n");
     }
     fclose(fp);
 }
 
-void transpose(complex inp[N_lol][N_lol])
+void transpose(complex inp[N][N])
 {
     int a, b;
-    for (a = 0; a < N_lol; a++)
+    for (a = 0; a < N; a++)
     {
-        for (b = a + 1; b < N_lol; b++)
+        for (b = a + 1; b < N; b++)
         {
             C_SWAP(inp[a][b], inp[b][a]);
         }
     }
 }
 
-void c_fft2d_serial(complex inp[N][N])
-{
-    int i, j;
-    for (i = 0; i < N; i++)
-    {
-        c_fft1d(&inp[i][0], N, -1);
-    }
-    transpose(inp);
-    for (i = 0; i < N; i++)
-    {
-        c_fft1d(&inp[i][0], N, -1);
-    }
-    transpose(inp);
-}
-
-void c_inv_fft2d_serial(complex inp[N][N])
-{
-    int i, j;
-    //transpose(inp);
-    for (i = 0; i < N; i++)
-    {
-        c_fft1d(&inp[i][0], N, +1);
-    }
-
-    transpose(inp);
-    for (i = 0; i < N; i++)
-    {
-        c_fft1d(&inp[i][0], N, +1);
-    }
-    transpose(inp);
-}
-
-void pointMul_serial(complex inpA[N][N], complex inpB[N][N])
-{
-    int a, b;
-    for (a = 0; a < N; a++)
-    {
-        for (b = 0; b < N; b++)
-        {
-            inpA[a][b].r *= inpB[a][b].r;
-            inpA[a][b].i *= inpB[a][b].i;
-        }
-    }
-}
-
-void print2DMatrix(float mat[N_lol][N_lol])
-{
-    int i, j;
-    for (i = 0; i < N_lol; i++)
-    {
-        for(j = 0; j < N_lol; j++)
-        {
-            printf("%f\t", mat[i][j]);
-        }
-        printf("\n");
-    }
-}
-
-void checkIfEqual(float matA[N][N], float matB[N][N])
-{
-    int i, j;
-    for (i = 0; i < N; i++)
-    {
-        for(j = 0; j < N; j++)
-        {
-            if (matA[i][j] != matB[i][j])
-            {
-                printf("Answer Incorrect :(\nMismatch at i=%d, j=%d\ntarget[%d][%d]=%f, computed[%d][%d]=%f\n", i, j, i, j, matB[i][j], i, j, matA[i][j]);
-                return;
-            }
-        }
-    }
-    printf("Correct Solution! :D\n");
-}
-
-
-void compute()
-{
-    float dataA[N][N], dataB[N][N], dataD[N][N], D[N][N];
-    //int i, j;
-
-    complex A[N][N], B[N][N];
-
-    readFile("2_im1", dataA);
-    readFile("2_im2", dataB);
-    readFile("out_2", dataD);
-
-    //print2DMatrix(dataA);
-
-    //readFile("1_im1", dataA);
-    //readFile("1_im2", dataB);
-    //readFile("out_1", dataD);
-
-    parseToComplex(A, dataA);
-    parseToComplex(B, dataB);
-
-    c_fft2d_serial(A);
-    c_fft2d_serial(B);
-
-    pointMul_serial(A, B);
-
-    c_inv_fft2d_serial(A);
-
-    parseToReal(D, A);
-
-    //print2DMatrix(D);
-
-    checkIfEqual(D, dataD);
-}
-
-
-
-
-
-
-void func1(complex *inp)
-{
-    int i, j;
-    for (i = 0; i < N_lol; i++)
-        for(j = 0; j < N_lol; j++)
-        {
-            inp[i * N_lol + j].r = i*N_lol + j;
-            inp[i * N_lol + j].i = 0;
-        }
-}
-
-void func2(complex *inp)
-{
-    int i, j;
-    for (i = 0; i < N_lol; i++)
-        for(j = 0; j < N_lol; j++)
-        {
-            inp[i * N_lol + j].r = (i*N_lol + j)/2;
-            inp[i * N_lol + j].i = 0;
-        }
-}
-
-void func(float inp[N_lol][N_lol])
-{
-    int i, j;
-    for (i = 0; i < N_lol; i++)
-        for(j = 0; j < N_lol; j++)
-            inp[i][j] = i*N_lol + j;
-}
-
-void lolop(complex *arr, int n)
-{
-    int a, b;
-    for(a = 0; a < n; a++)
-    {
-        /*
-        if (arr[a].r > 50)
-            arr[a].r = 1;
-        else
-            arr[a].r = 0;
-        */
-
-        arr[a].r *= 2;
-        arr[a].i = 3.14;
-    }
-}
-
-void processFFTChunk(complex *myChunk, int blockSizeRows)
+void processFFTChunk(complex *myChunk, int blockSizeRows, int isign)
 {
     int i, j;
     for (i = 0; i < blockSizeRows; i++)
     {
-        lolop(&myChunk[i * N_lol], N_lol);
+        c_fft1d(&myChunk[i * N], N, isign);
     }
 }
-
 
 void linearTranspose(complex *data)
 {
     int i, j;
-    for (i = 0; i < N_lol; i++)
+    for (i = 0; i < N; i++)
     {
-        for (j = i + 1; j < N_lol; j++)
+        for (j = i + 1; j < N; j++)
         {
-            C_SWAP(data[i * N_lol + j], data[j * N_lol + i]);
+            C_SWAP(data[i * N + j], data[j * N + i]);
         }
     }
 }
 
-void c_fft2d_parallel(complex *megaChunk, int nprocs, int blockSizeRows, int lastBlockSize, MPI_Datatype mpi_complex)
+void c_fft2d_parallel(complex *megaChunk, int nprocs, int blockSizeRows, int lastBlockSize, MPI_Datatype mpi_complex, int isign)
 {
     int currBlockStart, limit, i, tmp;
 
     for (tmp = 0; tmp < 2; tmp++)
     {
-        for (i = 1; i < nprocs; i++)
+        if (nprocs > 1)
         {
-            currBlockStart = i * blockSizeRows;
-            if ((currBlockStart + blockSizeRows) > N_lol)
-                limit = lastBlockSize * N_lol;
-            else
-                limit = blockSizeRows * N_lol;
+            for (i = 1; i < nprocs; i++)
+            {
+                currBlockStart = i * blockSizeRows;
+                if ((currBlockStart + blockSizeRows) > N)
+                    limit = lastBlockSize * N;
+                else
+                    limit = blockSizeRows * N;
 
-            if (currBlockStart < N_lol)
-                MPI_Send((megaChunk + currBlockStart * N_lol), limit, mpi_complex, i, 0, MPI_COMM_WORLD);
+                if (currBlockStart < N)
+                    MPI_Send((megaChunk + currBlockStart * N), limit, mpi_complex, i, 0, MPI_COMM_WORLD);
+            }
         }
+
 
         for (i = 0; i < blockSizeRows; i++)
         {
-            lolop(&megaChunk[i * N_lol], N_lol);
+            c_fft1d(&megaChunk[i * N], N, isign);
         }
 
-        for (i = 1; i < nprocs - 1; i++)
+        if (nprocs > 1)
         {
-            MPI_Recv(&megaChunk[i * N_lol * blockSizeRows], blockSizeRows * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            for (i = 1; i < nprocs - 1; i++)
+            {
+                MPI_Recv(&megaChunk[i * N * blockSizeRows], blockSizeRows * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+            MPI_Recv(&megaChunk[(nprocs - 1) * N * blockSizeRows], lastBlockSize * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
 
-        MPI_Recv(&megaChunk[(nprocs - 1) * N_lol * blockSizeRows], lastBlockSize * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         linearTranspose(megaChunk);
     }
 }
@@ -384,62 +199,67 @@ void c_fft2d_parallel(complex *megaChunk, int nprocs, int blockSizeRows, int las
 void pointWiseMul_parallel(complex *megaChunk1, complex *megaChunk2, int nprocs, int blockSizeRows, int lastBlockSize, MPI_Datatype mpi_complex)
 {
     int i, j;
-    for (i = 1; i < (nprocs - 1); i++)
-    {
-        MPI_Send((megaChunk1 + i * blockSizeRows * N_lol), blockSizeRows * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD);
-        MPI_Send((megaChunk2 + i * blockSizeRows * N_lol), blockSizeRows * N_lol, mpi_complex, i, 1, MPI_COMM_WORLD);
-    }
-    MPI_Send((megaChunk1 + (nprocs - 1) * blockSizeRows * N_lol), lastBlockSize * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD);
-    MPI_Send((megaChunk2 + (nprocs - 1) * blockSizeRows * N_lol), lastBlockSize * N_lol, mpi_complex, i, 1, MPI_COMM_WORLD);
 
-    for (i = 0; i < (blockSizeRows * N_lol); i++)
+    if (nprocs > 1)
+    {
+        for (i = 1; i < (nprocs - 1); i++)
+        {
+            MPI_Send((megaChunk1 + i * blockSizeRows * N), blockSizeRows * N, mpi_complex, i, 0, MPI_COMM_WORLD);
+            MPI_Send((megaChunk2 + i * blockSizeRows * N), blockSizeRows * N, mpi_complex, i, 1, MPI_COMM_WORLD);
+        }
+        MPI_Send((megaChunk1 + (nprocs - 1) * blockSizeRows * N), lastBlockSize * N, mpi_complex, i, 0, MPI_COMM_WORLD);
+        MPI_Send((megaChunk2 + (nprocs - 1) * blockSizeRows * N), lastBlockSize * N, mpi_complex, i, 1, MPI_COMM_WORLD);
+    }
+
+
+    for (i = 0; i < (blockSizeRows * N); i++)
     {
         megaChunk1[i].r *= megaChunk2[i].r;
         megaChunk1[i].i *= megaChunk2[i].i;
     }
 
-    for (i = 1; i < (nprocs - 1); i++)
+    if (nprocs > 1)
     {
-        MPI_Recv((megaChunk1 + i * blockSizeRows * N_lol), blockSizeRows * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (i = 1; i < (nprocs - 1); i++)
+        {
+            MPI_Recv((megaChunk1 + i * blockSizeRows * N), blockSizeRows * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
+        MPI_Recv((megaChunk1 + (nprocs - 1) * blockSizeRows * N), lastBlockSize * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
-    MPI_Recv((megaChunk1 + (nprocs - 1) * blockSizeRows * N_lol), lastBlockSize * N_lol, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
-
 
 void processMULChunk(complex *chunk0, complex *chunk1, int blockSizeRows)
 {
     int i;
-    for (i = 0; i < blockSizeRows * N_lol; i++)
+    for (i = 0; i < blockSizeRows * N; i++)
     {
         chunk0[i].r *= chunk1[i].r;
         chunk0[i].i *= chunk1[i].i;
     }
 }
 
-
 void subProcessMethod(int blockSizeRows, MPI_Datatype mpi_complex)
 {
     int i;
-    complex *myChunk0 = (complex *)malloc(blockSizeRows * N_lol * sizeof(complex));
-    complex *myChunk1 = (complex *)malloc(blockSizeRows * N_lol * sizeof(complex));
+    complex *myChunk0 = (complex *)malloc(blockSizeRows * N * sizeof(complex));
+    complex *myChunk1 = (complex *)malloc(blockSizeRows * N * sizeof(complex));
     for (i = 0; i < 4; i++)
     {
-        MPI_Recv(myChunk0, N_lol * blockSizeRows, mpi_complex, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        processFFTChunk(myChunk0, blockSizeRows);
-        MPI_Send(myChunk0, blockSizeRows * N_lol, mpi_complex, 0, 0, MPI_COMM_WORLD);
+        MPI_Recv(myChunk0, N * blockSizeRows, mpi_complex, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        processFFTChunk(myChunk0, blockSizeRows, -1);
+        MPI_Send(myChunk0, blockSizeRows * N, mpi_complex, 0, 0, MPI_COMM_WORLD);
     }
-    MPI_Recv(myChunk0, N_lol * blockSizeRows, mpi_complex, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    MPI_Recv(myChunk1, N_lol * blockSizeRows, mpi_complex, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(myChunk0, N * blockSizeRows, mpi_complex, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(myChunk1, N * blockSizeRows, mpi_complex, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     processMULChunk(myChunk0, myChunk1, blockSizeRows);
-    MPI_Send(myChunk0, blockSizeRows * N_lol, mpi_complex, 0, 0, MPI_COMM_WORLD);
+    MPI_Send(myChunk0, blockSizeRows * N, mpi_complex, 0, 0, MPI_COMM_WORLD);
     for (i = 0; i < 2; i++)
     {
-        MPI_Recv(myChunk0, N_lol * blockSizeRows, mpi_complex, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        processFFTChunk(myChunk0, blockSizeRows);
-        MPI_Send(myChunk0, blockSizeRows * N_lol, mpi_complex, 0, 0, MPI_COMM_WORLD);
+        MPI_Recv(myChunk0, N * blockSizeRows, mpi_complex, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        processFFTChunk(myChunk0, blockSizeRows, +1);
+        MPI_Send(myChunk0, blockSizeRows * N, mpi_complex, 0, 0, MPI_COMM_WORLD);
     }
 }
-
 
 int main(int argc, int **argv)
 {
@@ -454,73 +274,52 @@ int main(int argc, int **argv)
     MPI_Type_commit(&mpi_complex);
 
     int i, j, blockSizeRows;
-    blockSizeRows = ceil(N_lol / (float)nprocs);
+    blockSizeRows = ceil(N / (float)nprocs);
 
-    int lastBlockSize = blockSizeRows - (blockSizeRows * nprocs - N_lol);
+    int lastBlockSize = blockSizeRows - (blockSizeRows * nprocs - N);
+
+    if (nprocs == 1)
+        lastBlockSize = 0;
 
     if (rank == 0)
     {
-        printf("Last Block size = %d\n", lastBlockSize);
-        complex megaChunk1[N_lol * N_lol], megaChunk2[N_lol * N_lol];
-        func1(megaChunk1);
-        func2(megaChunk2);
-        c_fft2d_parallel(megaChunk2, nprocs, blockSizeRows, lastBlockSize, mpi_complex);
-        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex);
+        double startTime, endTime;
+        complex megaChunk1[N * N], megaChunk2[N * N];
+        char file1[50], file2[50];
+        printf("Please enter the input file name. (Please enter after entering a name)-\n");
+        scanf("%s", file1);
+        scanf("%s", file2);
 
-        printf("\n");
-        for (i = 0; i < N_lol; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%e\t", megaChunk1[i * N_lol + j].r);
-            }
-            printf("\n");
-        }
+        printf("Reading Files...\n");
+        readFileComplex(file1, megaChunk1);
+        readFileComplex(file2, megaChunk2);
 
-        printf("\n");
-        for (i = 0; i < N_lol; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%e\t", megaChunk2[i * N_lol + j].r);
-            }
-            printf("\n");
-        }
+        printf("Computing Forward FFT...\n");
 
+        startTime = MPI_Wtime();
+
+        c_fft2d_parallel(megaChunk2, nprocs, blockSizeRows, lastBlockSize, mpi_complex, -1);
+        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex, -1);
+
+        printf("Performing Pointwise Multiplication....\n");
         pointWiseMul_parallel(megaChunk1, megaChunk2, nprocs, blockSizeRows, lastBlockSize, mpi_complex);
 
-        printf("\n");
-        for (i = 0; i < N_lol; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%e\t", megaChunk1[i * N_lol + j].r);
-            }
-            printf("\n");
-        }
+        printf("Computing Inverse FFT...\n");
+        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex, +1);
 
-        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex);
+        endTime = MPI_Wtime();
 
-        printf("\n");
-        for (i = 0; i < N_lol; i++)
-        {
-            for (j = 0; j < N_lol; j++)
-            {
-                printf("%e\t", megaChunk1[i * N_lol + j].r);
-            }
-            printf("\n");
-        }
+        printf("Writing output to file...\n");
+        writeFileComplex("conv_parallel", megaChunk1);
+
+        printf("Execution Time = %f\n", endTime - startTime);
     }
 
     if (rank > 0 & rank < (nprocs - 1))
-    {
         subProcessMethod(blockSizeRows, mpi_complex);
-    }
 
     if (rank == nprocs - 1)
-    {
         subProcessMethod(lastBlockSize, mpi_complex);
-    }
 
     MPI_Finalize();
 }
