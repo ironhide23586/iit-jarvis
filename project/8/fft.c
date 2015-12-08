@@ -156,10 +156,10 @@ void linearTranspose(complex *data)
     }
 }
 
-void c_fft2d_parallel(complex *megaChunk, int nprocs, int blockSizeRows, int lastBlockSize, MPI_Datatype mpi_complex, int isign)
+void c_fft2d_parallel(complex *megaChunk, int nprocs, int blockSizeRows, int lastBlockSize, MPI_Datatype mpi_complex, int isign, double *commDuration)
 {
     int currBlockStart, limit, i, tmp;
-
+    double myDuration = 0, startTime, endTime;
     for (tmp = 0; tmp < 2; tmp++)
     {
         if (nprocs > 1)
@@ -173,7 +173,12 @@ void c_fft2d_parallel(complex *megaChunk, int nprocs, int blockSizeRows, int las
                     limit = blockSizeRows * N;
 
                 if (currBlockStart < N)
+                {
+                    startTime = MPI_Wtime();
                     MPI_Send((megaChunk + currBlockStart * N), limit, mpi_complex, i, 0, MPI_COMM_WORLD);
+                    endTime = MPI_Wtime();
+                    myDuration += (endTime - startTime);
+                }
             }
         }
 
@@ -185,23 +190,29 @@ void c_fft2d_parallel(complex *megaChunk, int nprocs, int blockSizeRows, int las
 
         if (nprocs > 1)
         {
+            startTime = MPI_Wtime();
             for (i = 1; i < nprocs - 1; i++)
             {
                 MPI_Recv(&megaChunk[i * N * blockSizeRows], blockSizeRows * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             MPI_Recv(&megaChunk[(nprocs - 1) * N * blockSizeRows], lastBlockSize * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            endTime = MPI_Wtime();
+            myDuration += (endTime - startTime);
         }
 
         linearTranspose(megaChunk);
+        *commDuration = myDuration;
     }
 }
 
-void pointWiseMul_parallel(complex *megaChunk1, complex *megaChunk2, int nprocs, int blockSizeRows, int lastBlockSize, MPI_Datatype mpi_complex)
+void pointWiseMul_parallel(complex *megaChunk1, complex *megaChunk2, int nprocs, int blockSizeRows, int lastBlockSize, MPI_Datatype mpi_complex, double *commDuration)
 {
     int i, j;
+    double myDuration = 0, startTime, endTime;
 
     if (nprocs > 1)
     {
+        startTime = MPI_Wtime();
         for (i = 1; i < (nprocs - 1); i++)
         {
             MPI_Send((megaChunk1 + i * blockSizeRows * N), blockSizeRows * N, mpi_complex, i, 0, MPI_COMM_WORLD);
@@ -209,6 +220,9 @@ void pointWiseMul_parallel(complex *megaChunk1, complex *megaChunk2, int nprocs,
         }
         MPI_Send((megaChunk1 + (nprocs - 1) * blockSizeRows * N), lastBlockSize * N, mpi_complex, i, 0, MPI_COMM_WORLD);
         MPI_Send((megaChunk2 + (nprocs - 1) * blockSizeRows * N), lastBlockSize * N, mpi_complex, i, 1, MPI_COMM_WORLD);
+        endTime = MPI_Wtime();
+
+        myDuration += (endTime - startTime);
     }
 
 
@@ -220,12 +234,17 @@ void pointWiseMul_parallel(complex *megaChunk1, complex *megaChunk2, int nprocs,
 
     if (nprocs > 1)
     {
+        startTime = MPI_Wtime();
         for (i = 1; i < (nprocs - 1); i++)
         {
             MPI_Recv((megaChunk1 + i * blockSizeRows * N), blockSizeRows * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
         MPI_Recv((megaChunk1 + (nprocs - 1) * blockSizeRows * N), lastBlockSize * N, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        endTime = MPI_Wtime();
+        myDuration += (endTime - startTime);
     }
+
+    *commDuration = myDuration;
 }
 
 void processMULChunk(complex *chunk0, complex *chunk1, int blockSizeRows)
@@ -283,10 +302,10 @@ int main(int argc, int **argv)
 
     if (rank == 0)
     {
-        double startTime, endTime;
+        double startTime, endTime, comm_Duration = 0, tmp_duration, totalDuration, computeDuration;
         complex megaChunk1[N * N], megaChunk2[N * N];
         char file1[50], file2[50];
-        printf("Please enter the input file name. (Please enter after entering a name)-\n");
+        printf("Please enter the input file names. (Press enter after entering a name)-\n");
         scanf("%s", file1);
         scanf("%s", file2);
 
@@ -298,27 +317,37 @@ int main(int argc, int **argv)
 
         startTime = MPI_Wtime();
 
-        c_fft2d_parallel(megaChunk2, nprocs, blockSizeRows, lastBlockSize, mpi_complex, -1);
-        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex, -1);
+        c_fft2d_parallel(megaChunk2, nprocs, blockSizeRows, lastBlockSize, mpi_complex, -1, &tmp_duration);
+        comm_Duration += tmp_duration;
+        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex, -1, &tmp_duration);
+        comm_Duration += tmp_duration;
 
         printf("Performing Pointwise Multiplication....\n");
-        pointWiseMul_parallel(megaChunk1, megaChunk2, nprocs, blockSizeRows, lastBlockSize, mpi_complex);
+        pointWiseMul_parallel(megaChunk1, megaChunk2, nprocs, blockSizeRows, lastBlockSize, mpi_complex, &tmp_duration);
+        comm_Duration += tmp_duration;
 
         printf("Computing Inverse FFT...\n");
-        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex, +1);
+        c_fft2d_parallel(megaChunk1, nprocs, blockSizeRows, lastBlockSize, mpi_complex, +1, &tmp_duration);
+        comm_Duration += tmp_duration;
+
 
         endTime = MPI_Wtime();
 
-        printf("Writing output to file...\n");
-        writeFileComplex("conv_parallel", megaChunk1);
+        totalDuration = endTime - startTime;
+        computeDuration = totalDuration - comm_Duration;
 
-        printf("Execution Time = %f\n", endTime - startTime);
+        printf("Writing output to file...\n");
+        writeFileComplex("conv_parallel_a", megaChunk1);
+
+        printf("Total Execution Time = %f\n", totalDuration);
+        printf("Communication Time = %f\n", comm_Duration);
+        printf("Computation Duration = %f\n", computeDuration);
     }
 
     if (rank > 0 & rank < (nprocs - 1))
         subProcessMethod(blockSizeRows, mpi_complex);
 
-    if (rank == nprocs - 1)
+    if (rank > 0 & rank == nprocs - 1)
         subProcessMethod(lastBlockSize, mpi_complex);
 
     MPI_Finalize();
