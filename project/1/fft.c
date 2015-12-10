@@ -250,9 +250,9 @@ int main()
 
     complex A[N][N], B[N][N];
 
-    readFile("2_im1", dataA);
-    readFile("2_im2", dataB);
-    readFile("out_2", dataD);
+    readFile("1_im1", dataA);
+    readFile("1_im2", dataB);
+    readFile("out_1", dataD);
 
     //print2DMatrix(dataA);
 
