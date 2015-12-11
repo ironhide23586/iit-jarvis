@@ -263,12 +263,18 @@ int main()
     parseToComplex(A, dataA);
     parseToComplex(B, dataB);
 
+    double startTime = MPI_Wtime();
+
     c_fft2d_serial(A);
     c_fft2d_serial(B);
 
     pointMul_serial(A, B);
 
     c_inv_fft2d_serial(A);
+
+    double endTime = MPI_Wtime();
+
+    printf("Duration = %f\n", (endTime - startTime));
 
     float D[N][N];
     parseToReal(D, A);
